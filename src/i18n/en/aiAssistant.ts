@@ -1,0 +1,50 @@
+import { AiAssistantTranslations } from '../types';
+
+export const aiAssistant: AiAssistantTranslations = {
+  panelTitle: 'Noon Tools',
+  geminiBadge: 'Gemini',
+  localMockBadge: 'Local Demo',
+  geminiPoweredBadge: 'AI Powered by Gemini',
+  selectionTypePrefix: 'Selection Type:',
+  loadingTitle: 'Analyzing selected section and preparing response...',
+  loadingSub: 'Connecting to AI Gateway to deliver pedagogically structured assistance.',
+  errorTitle: 'Assistant Notice',
+  retryBtn: 'Retry',
+  closeBtn: 'Close',
+  disclaimer: 'Generated via AI Gateway adhering strictly to school textbook concepts.',
+  explain: 'Explain',
+  simplify: 'Simplify',
+  stepByStep: 'Step by Step',
+  hint: 'Hint',
+  quiz: 'Quiz Me',
+  analyzeProblem: 'Analyze Problem',
+  explainFigure: 'Explain Figure',
+  readAloud: 'Listen',
+  toolsList: {
+    simplify: 'Simplify',
+    simplifyDesc: 'Easy rephrasing of the concept',
+    stepByStep: 'Step by Step',
+    stepByStepDesc: 'Sequential breakdown of the idea',
+    hint: 'Hint',
+    hintDesc: 'Guidance without giving away the answer',
+    quiz: 'Quiz Me',
+    quizDesc: 'Quick check on this section',
+    readAloud: 'Listen',
+    readAloudDesc: 'Audio narration of page elements',
+    analyzeProblem: 'Analyze Problem',
+    analyzeProblemDesc: 'Extract facts, targets, and formula',
+    explainFigure: 'Explain Figure',
+    explainFigureDesc: 'Clarify labels, diagrams, and arrows',
+  },
+  quizFeedback: {
+    checkAnswer: 'Check Answer',
+    correct: 'Correct answer! Well done 🎉',
+    incorrect: 'Incorrect, check the explanation below:',
+  },
+  audioPlayer: {
+    playing: 'Audio explanation playing...',
+    paused: 'Audio explanation paused',
+  },
+};
+
+export default aiAssistant;
