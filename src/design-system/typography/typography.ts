@@ -1,11 +1,11 @@
 /**
  * Typography system for the Noon educational platform.
- * Maintains optimal Arabic readability with IBM Plex Sans Arabic and Alexandria.
+ * Uses IBM Plex Sans Arabic consistently for clear Arabic UI and reading.
  */
 
 export const TYPOGRAPHY = {
   fonts: {
-    display: "'Alexandria', 'IBM Plex Sans Arabic', sans-serif",
+    display: "'IBM Plex Sans Arabic', system-ui, sans-serif",
     body: "'IBM Plex Sans Arabic', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
     mono: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
   },

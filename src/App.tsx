@@ -149,7 +149,7 @@ export default function App() {
   const activeBook = books.find((b) => b.id === activeBookId) || books[0] || INITIAL_ADMIN_BOOKS[0];
 
   return (
-    <div className="min-h-screen flex flex-col bg-white text-slate-900 selection:bg-indigo-100 selection:text-indigo-900 font-sans">
+    <div className="min-h-screen flex flex-col bg-[#f7f8fc] text-slate-900 selection:bg-indigo-100 selection:text-indigo-900 font-sans">
       {/* Top Header */}
       <Header activePage={activePage} onNavigate={handleNavigate} />
 

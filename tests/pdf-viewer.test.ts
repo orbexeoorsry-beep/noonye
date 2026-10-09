@@ -490,7 +490,7 @@ async function runTests() {
     
     // Check single lesson curated summary
     const singleSummary = await lessonSummaryService.generateSummary([geoLessons[0]], 'الجغرافيا للصف التاسع');
-    assert(singleSummary && singleSummary.title, 'LessonSummaryService successfully retrieves single lesson curated summary');
+    assert(Boolean(singleSummary && singleSummary.title), 'LessonSummaryService successfully retrieves single lesson curated summary');
     assert(Array.isArray(singleSummary.sections) && singleSummary.sections.length > 0, 'Curated summary sections are successfully populated');
     assert(singleSummary.reviewQuestions.length >= 2, 'Summary review questions count aligns with rules');
     

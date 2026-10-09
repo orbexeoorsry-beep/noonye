@@ -259,17 +259,9 @@ export const Library: React.FC<LibraryProps> = ({
                   <h3 className="text-sm font-bold text-slate-800 mb-1 font-display">
                     {t.library.noLocalBooksYet}
                   </h3>
-                  <p className="text-xs text-slate-500 mb-4 font-sans leading-relaxed">
+                  <p className="text-xs text-slate-500 font-sans leading-relaxed">
                     {t.addBook.uploadSubtitle}
                   </p>
-                  <button
-                    type="button"
-                    onClick={() => onNavigate('add-book')}
-                    className="min-h-[40px] px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition-all shadow-xs active:scale-[0.98] inline-flex items-center gap-1.5"
-                  >
-                    <AppIcon name="addBook" size="xs" />
-                    <span>{t.actions.addBook}</span>
-                  </button>
                 </div>
               )}
             </section>

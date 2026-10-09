@@ -15,10 +15,7 @@ export interface NavigationIconProps
   className?: string;
 }
 
-/**
- * NavigationIcon: Unified navigation component for header and mobile bottom bars.
- * Ensures minimum touch target (44px+), active state indicator, and accessible labeling.
- */
+/** Unified accessible navigation button used by the mobile destination bar. */
 export const NavigationIcon: React.FC<NavigationIconProps> = ({
   name,
   icon,
@@ -39,39 +36,26 @@ export const NavigationIcon: React.FC<NavigationIconProps> = ({
         aria-label={label}
         aria-current={isActive ? 'page' : undefined}
         disabled={disabled}
-        className={`flex flex-col items-center justify-center min-h-[48px] min-w-[48px] py-1.5 px-2 transition-all duration-150 relative select-none active:scale-[0.98] motion-reduce:transform-none focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-indigo-500 rounded-xl ${
+        className={`relative flex min-h-[48px] min-w-[56px] flex-col items-center justify-center rounded-xl px-2 py-1.5 transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-indigo-500 ${
           isActive
-            ? 'text-indigo-600 font-semibold'
-            : 'text-slate-500 hover:text-slate-900'
+            ? 'bg-indigo-50/80 text-indigo-700 font-semibold'
+            : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'
         } ${className}`}
         {...rest}
       >
-        <div className="relative">
-          <AppIcon
-            name={name}
-            icon={icon}
-            size={iconSize || 'lg'}
-            className={`transition-transform duration-150 motion-reduce:transform-none ${
-              isActive ? 'scale-110' : ''
-            }`}
-          />
+        <span className="relative">
+          <AppIcon name={name} icon={icon} size={iconSize || 'md'} />
           {typeof badgeCount === 'number' && badgeCount > 0 && (
-            <span className="absolute -top-1 -right-2 w-3.5 h-3.5 rounded-full bg-indigo-600 text-white font-bold text-[9px] flex items-center justify-center">
+            <span className="absolute -right-2 -top-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-indigo-600 text-[9px] font-bold text-white">
               {badgeCount}
             </span>
           )}
-        </div>
-        <span className="text-[11px] mt-1 leading-none tracking-tight whitespace-nowrap">
-          {label}
         </span>
-        {isActive && (
-          <span className="w-1.5 h-1.5 rounded-full bg-indigo-600 absolute bottom-1" />
-        )}
+        <span className="mt-1 whitespace-nowrap text-[11px] leading-none">{label}</span>
       </button>
     );
   }
 
-  // Header Nav Link
   return (
     <button
       type="button"
@@ -79,10 +63,10 @@ export const NavigationIcon: React.FC<NavigationIconProps> = ({
       aria-label={label}
       aria-current={isActive ? 'page' : undefined}
       disabled={disabled}
-      className={`min-h-[44px] px-3 py-1.5 rounded-xl text-sm font-medium transition-all duration-150 flex items-center gap-1.5 whitespace-nowrap select-none active:scale-[0.98] motion-reduce:transform-none focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-indigo-500 ${
+      className={`flex min-h-[44px] items-center gap-1.5 whitespace-nowrap rounded-xl border px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-indigo-500 ${
         isActive
-          ? 'text-indigo-600 font-semibold bg-indigo-50/70 border border-indigo-100 shadow-2xs'
-          : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 border border-transparent'
+          ? 'border-indigo-100 bg-indigo-50/70 text-indigo-600 shadow-2xs'
+          : 'border-transparent text-slate-600 hover:bg-slate-100/80 hover:text-slate-900'
       } ${className}`}
       {...rest}
     >
