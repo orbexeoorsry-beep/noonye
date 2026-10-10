@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { ar } from './ar';
 import { en } from './en';
 import { TranslationDictionary } from './types';
+import { isFeatureEnabled } from '../config/feature-flags';
 
 export type Language = string;
 
@@ -47,7 +48,11 @@ if (typeof window !== 'undefined') {
   try {
     const saved = localStorage.getItem('noon_language');
     if (saved && (saved === 'ar' || saved === 'en' || dictionaries[saved])) {
-      currentLanguage = saved;
+      if (saved === 'en' && !isFeatureEnabled('englishLanguageEnabled')) {
+        currentLanguage = 'ar';
+      } else {
+        currentLanguage = saved;
+      }
     }
   } catch {
     // ignore localStorage errors in sandboxed iframes
@@ -64,6 +69,9 @@ export function getLanguage(): Language {
 }
 
 export function setLanguage(lang: Language) {
+  if (lang === 'en' && !isFeatureEnabled('englishLanguageEnabled')) {
+    lang = 'ar';
+  }
   if (!dictionaries[lang] && lang !== 'ar' && lang !== 'en') {
     console.warn(`Language '${lang}' is not registered, defaulting to 'ar'`);
     lang = 'ar';
@@ -87,15 +95,20 @@ export function setLanguage(lang: Language) {
 }
 
 /**
- * Creates a robust fallback proxy over target dictionary.
- * If a key or nested section is missing in target, it gracefully falls back to the English dictionary.
- * If even missing in English, returns a safe string instead of breaking the UI.
+ * Creates a robust fallback proxy over target dictionary with memoized nested proxies
+ * so object references remain 100% stable across React renders.
  */
 function createFallbackProxy<T extends object>(target: T, fallback: any, path = ''): T {
+  const childCache = new Map<string | symbol, any>();
+
   return new Proxy(target, {
     get(obj: any, prop: string | symbol) {
       if (typeof prop === 'symbol' || prop === 'then') {
         return obj[prop];
+      }
+
+      if (childCache.has(prop)) {
+        return childCache.get(prop);
       }
 
       const val = obj[prop];
@@ -104,7 +117,13 @@ function createFallbackProxy<T extends object>(target: T, fallback: any, path = 
       // If key exists and is non-null
       if (val !== undefined && val !== null) {
         if (typeof val === 'object' && !Array.isArray(val)) {
-          return createFallbackProxy(val, fallbackVal, path ? `${path}.${String(prop)}` : String(prop));
+          const proxied = createFallbackProxy(
+            val,
+            fallbackVal,
+            path ? `${path}.${String(prop)}` : String(prop)
+          );
+          childCache.set(prop, proxied);
+          return proxied;
         }
         return val;
       }
@@ -112,15 +131,43 @@ function createFallbackProxy<T extends object>(target: T, fallback: any, path = 
       // If missing in current language, fall back to English dictionary
       if (fallbackVal !== undefined && fallbackVal !== null) {
         if (typeof fallbackVal === 'object' && !Array.isArray(fallbackVal)) {
-          return createFallbackProxy({}, fallbackVal, path ? `${path}.${String(prop)}` : String(prop));
+          const proxied = createFallbackProxy(
+            {},
+            fallbackVal,
+            path ? `${path}.${String(prop)}` : String(prop)
+          );
+          childCache.set(prop, proxied);
+          return proxied;
         }
         return fallbackVal;
       }
 
-      // If missing in both, return fallback representation or empty string instead of undefined crashing
+      // If missing in both, return empty string instead of undefined crashing
       return '';
     },
   });
+}
+
+const dictProxyCache: Record<string, TranslationDictionary> = {};
+
+function getProxiedDictionary(lang: Language): TranslationDictionary {
+  if (dictProxyCache[lang]) {
+    return dictProxyCache[lang];
+  }
+  const rawDict = dictionaries[lang] || dictionaries.ar;
+  const englishFallback = dictionaries.en;
+  const proxied =
+    lang === 'en' ? rawDict : createFallbackProxy(rawDict, englishFallback);
+  dictProxyCache[lang] = proxied;
+  return proxied;
+}
+
+// Helper to interpolate params like {current} or {total} or {percent}
+function formatTemplate(template: string, params: Record<string, string | number>): string {
+  if (!template || typeof template !== 'string') return '';
+  return Object.entries(params).reduce((str, [key, val]) => {
+    return str.replace(new RegExp(`\\{${key}\\}`, 'g'), String(val));
+  }, template);
 }
 
 export function useI18n() {
@@ -134,20 +181,7 @@ export function useI18n() {
     };
   }, []);
 
-  const rawDict = dictionaries[lang] || dictionaries.ar;
-  const englishFallback = dictionaries.en;
-
-  // Wrap with English fallback proxy to prevent UI breakage
-  const dict = lang === 'en' ? rawDict : createFallbackProxy(rawDict, englishFallback);
-
-  // Helper to interpolate params like {current} or {total} or {percent}
-  const format = (template: string, params: Record<string, string | number>) => {
-    if (!template || typeof template !== 'string') return '';
-    return Object.entries(params).reduce((str, [key, val]) => {
-      return str.replace(new RegExp(`\\{${key}\\}`, 'g'), String(val));
-    }, template);
-  };
-
+  const dict = getProxiedDictionary(lang);
   const isRTL = lang === 'ar' || supportedLanguages[lang]?.dir === 'rtl';
 
   return {
@@ -155,7 +189,7 @@ export function useI18n() {
     lang,
     isRTL,
     setLanguage,
-    format,
+    format: formatTemplate,
   };
 }
 

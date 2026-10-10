@@ -6,6 +6,7 @@ import { LOCAL_STORE_CONFIG, formatFileSize } from '../services/local-document-s
 import { generateEducationalSamplePdf } from '../services/samplePdfGenerator';
 import { pdfService } from '../services/pdfService';
 import { AppIcon } from '../design-system';
+import { isFeatureEnabled } from '../config/feature-flags';
 
 interface AddBookProps {
   onAddBook: (newBook: Book) => void;
@@ -29,6 +30,10 @@ export const AddBook: React.FC<AddBookProps> = ({
   const [createdBook, setCreatedBook] = useState<Book | null>(null);
   const [errorMessage, setErrorMessage] = useState<string>('');
   const [isDragOver, setIsDragOver] = useState(false);
+
+  if (!isFeatureEnabled('localBooksEnabled')) {
+    return null;
+  }
 
   const processAndSavePdf = async (
     fileName: string,

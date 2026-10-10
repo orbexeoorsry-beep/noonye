@@ -131,25 +131,54 @@ export const pdfService = {
       const maxY = ((region.yPct + region.heightPct) / 100) * viewport.height;
 
       const selectedStrings: string[] = [];
+      const bandStrings: string[] = [];
 
       for (const item of textContent.items) {
         if (!('str' in item)) continue;
-        const strItem = item as { str: string; transform: number[] };
+        const strItem = item as {
+          str: string;
+          transform: number[];
+          width?: number;
+          height?: number;
+        };
         if (!strItem.str || !strItem.str.trim()) continue;
 
         const x = strItem.transform[4];
-        // PDF coordinates start from bottom-left; convert to top-down
+        // PDF coordinates start from bottom-left; convert to top-down baseline
         const y = viewport.height - strItem.transform[5];
 
-        // Check if character/word origin falls near or within the bounding box (with 8px tolerance)
-        if (x >= minX - 8 && x <= maxX + 8 && y >= minY - 8 && y <= maxY + 8) {
+        const fontSize =
+          Math.hypot(strItem.transform[0], strItem.transform[1]) ||
+          Math.abs(strItem.transform[3]) ||
+          12;
+        const itemWidth =
+          typeof strItem.width === 'number' && strItem.width > 0
+            ? strItem.width
+            : strItem.str.length * (fontSize * 0.52);
+        const itemHeight =
+          typeof strItem.height === 'number' && strItem.height > 0 ? strItem.height : fontSize;
+
+        const itemLeft = Math.min(x, x + itemWidth);
+        const itemRight = Math.max(x, x + itemWidth);
+        const itemTop = y - itemHeight;
+        const itemBottom = y + itemHeight * 0.35;
+
+        const overlapsY = itemBottom >= minY - 12 && itemTop <= maxY + 12;
+        const overlapsX = itemRight >= minX - 12 && itemLeft <= maxX + 12;
+
+        if (overlapsX && overlapsY) {
           selectedStrings.push(strItem.str.trim());
+        } else if (itemBottom >= minY - 20 && itemTop <= maxY + 20) {
+          bandStrings.push(strItem.str.trim());
         }
       }
 
-      // If specific bounding box yielded text, return it.
+      // If bounding box yielded text, return it; otherwise fall back to lines on the same vertical band
       if (selectedStrings.length > 0) {
         return selectedStrings.join(' ').trim();
+      }
+      if (bandStrings.length > 0) {
+        return bandStrings.join(' ').trim();
       }
 
       // Otherwise return empty string (indicates figure/image/diagram or non-OCR text)

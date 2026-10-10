@@ -150,3 +150,31 @@ tests/
 1. أنشئ مجلدًا جديدًا باسم رمز اللغة داخل `src/i18n/{code}/` (مثل `src/i18n/fr/`) يحتوي على ملفات الميزات المنفصلة: `common.ts`، `library.ts`، `bookViewer.ts`، `localDocuments.ts`، `selection.ts`، `aiAssistant.ts`، `guidedMath.ts`، `scienceAnalysis.ts`، `errors.ts`، و`settings.ts`، ومجمعة في `index.ts`.
 2. سجّل اللغة الجديدة في `src/i18n/index.ts` عبر استيرادها وإضافتها إلى `supportedLanguages` أو استدعاء `registerLanguage(code, dictionary, meta)`.
 
+---
+
+## 8. نظام التحكم بالميزات (Feature Flags)
+
+يمكن تشغيل أو إيقاف الميزات من ملف مركزي واحد دون تعديل مكونات الواجهة:
+
+- **ملف الإعدادات:** `src/config/feature-flags.ts`
+- **الدالة المساعدة:** `isFeatureEnabled('lessonSummaryEnabled')`
+
+لتشغيل أو إيقاف أي ميزة، غيّر قيمتها بين `true` و `false` داخل الكائن `featureFlags` في `src/config/feature-flags.ts`:
+
+```ts
+export const featureFlags: FeatureFlags = {
+  localBooksEnabled: true,       // الكتب المحلية ورفع ملفات PDF
+  lessonsEnabled: true,          // شريط الدروس والتنقل بينها
+  lessonTestsEnabled: true,      // اختبارات الدروس
+  lessonSummaryEnabled: false,   // ملخصات الدروس
+  selectionEnabled: false,       // أداة التحديد على صفحات الكتاب
+  aiAssistantEnabled: false,     // مساعد نون الذكي
+  guidedMathEnabled: false,      // التحليل الموجّه للمسائل الرياضية
+  scienceAnalysisEnabled: false, // تحليل الصور والأشكال العلمية
+  englishLanguageEnabled: true,  // دعم اللغة الإنجليزية وتبديل اللغة
+};
+```
+
+عند إغلاق أي ميزة (`false`)، يختفي زرها ورابطها تلقائيًا ولا يمكن تشغيلها عبر رابط مباشر دون أن يتعطل باقي التطبيق.
+
+

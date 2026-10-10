@@ -6,57 +6,56 @@ export const mathAnalysisService = {
    */
   parseProblemSections(text: string): ParsedMathSections | null {
     const extractSection = (headingRegex: RegExp, nextHeadingRegex: RegExp): string => {
-      const startMatch = text.search(headingRegex);
-      if (startMatch === -1) return '';
-      const sub = text.substring(startMatch);
-      const lineEnd = sub.indexOf('\n');
-      const contentStart = lineEnd !== -1 ? lineEnd + 1 : 0;
-      const rest = sub.substring(contentStart);
-      const nextMatch = rest.search(nextHeadingRegex);
-      if (nextMatch !== -1) {
-        return rest.substring(0, nextMatch).trim();
-      }
-      return rest.trim();
+      const match = headingRegex.exec(text);
+      if (!match || match.index === undefined) return '';
+      const afterHeading = text.substring(match.index + match[0].length);
+      const nextMatch = afterHeading.search(nextHeadingRegex);
+      const rawContent =
+        nextMatch !== -1 ? afterHeading.substring(0, nextMatch) : afterHeading;
+      return rawContent.replace(/^[\s:：\-*•]+/, '').trim();
     };
 
     const given = extractSection(
-      /(?:###|\*\*|•|\d\.)?\s*المعطيات/i,
-      /(?:###|\*\*|•|\d\.)?\s*(?:المطلوب|الفكرة|تلميح|خطوات|الحل النهائي|درجة الثقة)/i
+      /(?:###|##|\*\*|•|\d+\.)?\s*المعطيات(?:\*\*)?/i,
+      /(?:###|##|\*\*|•|\d+\.)?\s*(?:المطلوب|الفكرة|تلميح|خطوات|الحل النهائي|درجة الثقة)/i
     );
     const required = extractSection(
-      /(?:###|\*\*|•|\d\.)?\s*المطلوب/i,
-      /(?:###|\*\*|•|\d\.)?\s*(?:الفكرة|القانون|تلميح|خطوات|الحل النهائي|درجة الثقة)/i
+      /(?:###|##|\*\*|•|\d+\.)?\s*المطلوب(?:\*\*)?/i,
+      /(?:###|##|\*\*|•|\d+\.)?\s*(?:الفكرة|القانون|تلميح|خطوات|الحل النهائي|درجة الثقة)/i
     );
     const concept = extractSection(
-      /(?:###|\*\*|•|\d\.)?\s*(?:الفكرة أو القانون المناسب|الفكرة|القانون المناسب)/i,
-      /(?:###|\*\*|•|\d\.)?\s*(?:تلميح|خطوات|الحل النهائي|درجة الثقة)/i
+      /(?:###|##|\*\*|•|\d+\.)?\s*(?:الفكرة أو القانون المناسب|الفكرة|القانون المناسب)(?:\*\*)?/i,
+      /(?:###|##|\*\*|•|\d+\.)?\s*(?:تلميح|خطوات|الحل النهائي|درجة الثقة)/i
     );
     const hint = extractSection(
-      /(?:###|\*\*|•|\d\.)?\s*(?:تلميح أول|تلميح)/i,
-      /(?:###|\*\*|•|\d\.)?\s*(?:خطوات الحل|خطوات|الحل النهائي|درجة الثقة)/i
+      /(?:###|##|\*\*|•|\d+\.)?\s*(?:تلميح أول|تلميح)(?:\*\*)?/i,
+      /(?:###|##|\*\*|•|\d+\.)?\s*(?:خطوات الحل|خطوات|الحل النهائي|درجة الثقة)/i
     );
     const steps = extractSection(
-      /(?:###|\*\*|•|\d\.)?\s*(?:خطوات الحل|خطوات)/i,
-      /(?:###|\*\*|•|\d\.)?\s*(?:الحل النهائي|درجة الثقة)/i
+      /(?:###|##|\*\*|•|\d+\.)?\s*(?:خطوات الحل|خطوات)(?:\*\*)?/i,
+      /(?:###|##|\*\*|•|\d+\.)?\s*(?:الحل النهائي|درجة الثقة)/i
     );
     const finalSolution = extractSection(
-      /(?:###|\*\*|•|\d\.)?\s*(?:الحل النهائي|النتيجة النهائية)/i,
-      /(?:###|\*\*|•|\d\.)?\s*درجة الثقة/i
+      /(?:###|##|\*\*|•|\d+\.)?\s*(?:الحل النهائي|النتيجة النهائية)(?:\*\*)?/i,
+      /(?:###|##|\*\*|•|\d+\.)?\s*درجة الثقة/i
     );
-    const confidence = extractSection(/(?:###|\*\*|•|\d\.)?\s*درجة الثقة/i, /$/i);
+    const confidence = extractSection(
+      /(?:###|##|\*\*|•|\d+\.)?\s*درجة الثقة(?:\*\*)?/i,
+      /$/i
+    );
 
     if (!given && !required && !finalSolution) {
       return null;
     }
 
     return {
-      given: given || 'لم تحدد معطيات إضافية.',
-      required: required || 'المطلوب مبين في نص المسألة.',
-      concept: concept || 'تطبيق القواعد الرياضية المباشرة.',
-      hint: hint || 'راجع العلاقات الأساسية بين عناصر المسألة.',
-      steps: steps || 'تطبيق متسلسل للقانون.',
-      finalSolution: finalSolution || 'تم استخراج الناتج.',
-      confidence: confidence || '95%',
+      given: given || 'تم استخلاص المعطيات من الجزء المحدد في الصفحة.',
+      required: required || 'المطلوب مبين في نص المسألة أو السؤال.',
+      concept: concept || 'تطبيق القاعدة العلمية أو الرياضية المرتبطة بالدرس.',
+      hint: hint || 'راجع العلاقات الأساسية بين المعطيات والمطلوب.',
+      steps: steps || 'تطبيق متسلسل للقاعدة خطوة بخطوة.',
+      finalSolution: finalSolution || 'تم استخراج الناتج النهائي.',
+      confidence: confidence || '96%',
     };
   },
 

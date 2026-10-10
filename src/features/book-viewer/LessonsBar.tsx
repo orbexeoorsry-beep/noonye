@@ -2,6 +2,7 @@ import React, { useRef, useEffect } from 'react';
 import { BookLesson } from '../../services/bookLessonsService';
 import { AppIcon, IconButton } from '../../design-system';
 import { useI18n } from '../../i18n';
+import { isFeatureEnabled } from '../../config/feature-flags';
 
 interface LessonsBarProps {
   lessons: BookLesson[];
@@ -24,9 +25,14 @@ export const LessonsBar: React.FC<LessonsBarProps> = ({
   onStartQuiz,
   onStartSummary,
 }) => {
-  const { isRTL } = useI18n();
+  const { t, format, isRTL } = useI18n();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const activePillRef = useRef<HTMLDivElement>(null);
+
+  const lessonsEnabled = isFeatureEnabled('lessonsEnabled');
+  const lessonTestsEnabled = isFeatureEnabled('lessonTestsEnabled');
+  const lessonSummaryEnabled = isFeatureEnabled('lessonSummaryEnabled');
+  const canSelectLessonsForActions = lessonTestsEnabled || lessonSummaryEnabled;
 
   // Auto-scroll the active lesson pill into view smoothly
   useEffect(() => {
@@ -49,7 +55,7 @@ export const LessonsBar: React.FC<LessonsBarProps> = ({
     }
   };
 
-  if (!lessons || lessons.length === 0) {
+  if (!lessonsEnabled || !lessons || lessons.length === 0) {
     return null;
   }
 
@@ -78,7 +84,7 @@ export const LessonsBar: React.FC<LessonsBarProps> = ({
           const isCurrentPage =
             currentPage >= lesson.pageNumber &&
             (lesson.endPageNumber ? currentPage <= lesson.endPageNumber : true);
-          const isChecked = selectedLessonIds.includes(lesson.id);
+          const isChecked = canSelectLessonsForActions && selectedLessonIds.includes(lesson.id);
 
           return (
             <div
@@ -92,33 +98,35 @@ export const LessonsBar: React.FC<LessonsBarProps> = ({
                   : 'bg-slate-100/90 text-slate-700 hover:bg-slate-200/80 hover:text-slate-900 border-slate-200/70'
               }`}
             >
-              {/* Very Small Checkbox Square replacing the small book icon */}
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onToggleLessonSelect(lesson.id, e);
-                }}
-                className={`w-4 h-4 rounded-[4px] flex items-center justify-center transition-all cursor-pointer shrink-0 border ${
-                  isChecked
-                    ? 'bg-emerald-500 border-emerald-600 text-white shadow-xs scale-105'
-                    : isActive || isCurrentPage
-                    ? 'border-indigo-300/80 bg-indigo-700/60 hover:bg-indigo-500 text-transparent hover:text-indigo-200'
-                    : 'border-slate-300 bg-white hover:border-indigo-500 text-transparent hover:text-slate-400'
-                }`}
-                title={
-                  isChecked
-                    ? 'إلغاء تحديد هذا الدرس من الاختبار'
-                    : 'وضع إشارة صح (✅) لتضمين الدرس في اختبار جيمني'
-                }
-                aria-label={`تحديد ${lesson.title} للاختبار`}
-              >
-                {isChecked ? (
-                  <AppIcon name="check" size="xs" strokeWidth={3.5} />
-                ) : (
-                  <span className="w-2 h-2 rounded-[2px] opacity-0 hover:opacity-40 bg-slate-400" />
-                )}
-              </button>
+              {/* Very Small Checkbox Square when lessonTestsEnabled or lessonSummaryEnabled is active */}
+              {canSelectLessonsForActions && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onToggleLessonSelect(lesson.id, e);
+                  }}
+                  className={`w-4 h-4 rounded-[4px] flex items-center justify-center transition-all cursor-pointer shrink-0 border ${
+                    isChecked
+                      ? 'bg-emerald-500 border-emerald-600 text-white shadow-xs scale-105'
+                      : isActive || isCurrentPage
+                      ? 'border-indigo-300/80 bg-indigo-700/60 hover:bg-indigo-500 text-transparent hover:text-indigo-200'
+                      : 'border-slate-300 bg-white hover:border-indigo-500 text-transparent hover:text-slate-400'
+                  }`}
+                  title={
+                    isChecked
+                      ? 'إلغاء تحديد هذا الدرس'
+                      : 'وضع إشارة صح (✅) لتضمين الدرس'
+                  }
+                  aria-label={`تحديد ${lesson.title}`}
+                >
+                  {isChecked ? (
+                    <AppIcon name="check" size="xs" strokeWidth={3.5} />
+                  ) : (
+                    <span className="w-2 h-2 rounded-[2px] opacity-0 hover:opacity-40 bg-slate-400" />
+                  )}
+                </button>
+              )}
 
               {/* Lesson Title Clickable to navigate to page in the book */}
               <button
@@ -145,24 +153,26 @@ export const LessonsBar: React.FC<LessonsBarProps> = ({
               </button>
 
               {/* Quick direct Quiz button for this individual lesson */}
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onStartQuiz([lesson]);
-                }}
-                className={`p-1 rounded-lg transition-colors ml-0.5 flex items-center justify-center min-h-[28px] min-w-[28px] ${
-                  isActive || isCurrentPage
-                    ? 'text-indigo-200 hover:text-white hover:bg-indigo-700/80'
-                    : isChecked
-                    ? 'text-emerald-700 hover:text-emerald-950 hover:bg-emerald-200/70'
-                    : 'text-slate-400 hover:text-indigo-600 hover:bg-slate-200'
-                }`}
-                title={`بدء اختبار جيمني في (${lesson.title}) كامل`}
-                aria-label={`بدء اختبار ${lesson.title}`}
-              >
-                <AppIcon name="help" size="sm" />
-              </button>
+              {lessonTestsEnabled && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onStartQuiz([lesson]);
+                  }}
+                  className={`p-1 rounded-lg transition-colors ml-0.5 flex items-center justify-center min-h-[28px] min-w-[28px] ${
+                    isActive || isCurrentPage
+                      ? 'text-indigo-200 hover:text-white hover:bg-indigo-700/80'
+                      : isChecked
+                      ? 'text-emerald-700 hover:text-emerald-950 hover:bg-emerald-200/70'
+                      : 'text-slate-400 hover:text-indigo-600 hover:bg-slate-200'
+                  }`}
+                  title={`بدء اختبار في (${lesson.title}) كامل`}
+                  aria-label={`بدء اختبار ${lesson.title}`}
+                >
+                  <AppIcon name="help" size="sm" />
+                </button>
+              )}
             </div>
           );
         })}
@@ -179,39 +189,44 @@ export const LessonsBar: React.FC<LessonsBarProps> = ({
       />
 
       {/* Primary Action Buttons: Start Multi-Lesson Quiz & Lesson Summary when 1 or more lessons are checked with ✅ */}
-      {selectedLessons.length > 0 && (
+      {canSelectLessonsForActions && selectedLessons.length > 0 && (
         <div className="flex flex-col gap-1.5 shrink-0 animate-in fade-in slide-in-from-top-1 duration-200">
           {/* 1. اختبار الدروس */}
-          <button
-            type="button"
-            onClick={() => onStartQuiz(selectedLessons)}
-            className="min-h-[40px] px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs flex items-center justify-center gap-1.5 transition-all active:scale-[0.98] motion-reduce:transform-none focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-emerald-500 w-full"
-            title={`بدء اختبار جيمني الشامل في ${selectedLessons.length} دروس محددة`}
-          >
-            <AppIcon name="sparkles" size="sm" className="text-amber-300 animate-pulse motion-reduce:animate-none" />
-            <span>
-              {selectedLessons.length === 1
-                ? 'اختبار الدرس ✅'
-                : `اختبار (${selectedLessons.length} دروس) ✅`}
-            </span>
-          </button>
+          {lessonTestsEnabled && (
+            <button
+              type="button"
+              onClick={() => onStartQuiz(selectedLessons)}
+              className="min-h-[40px] px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs flex items-center justify-center gap-1.5 transition-all active:scale-[0.98] motion-reduce:transform-none focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-emerald-500 w-full"
+              title={`بدء اختبار شامل في ${selectedLessons.length} دروس محددة`}
+            >
+              <AppIcon name="sparkles" size="sm" className="text-amber-300 animate-pulse motion-reduce:animate-none" />
+              <span>
+                {selectedLessons.length === 1
+                  ? t.viewer.lessonQuizSingle
+                  : format(t.viewer.lessonQuizMulti, { count: selectedLessons.length })}
+              </span>
+            </button>
+          )}
 
           {/* 2. ملخص الدرس */}
-          <button
-            type="button"
-            onClick={() => onStartSummary(selectedLessons)}
-            className="min-h-[40px] px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-xs flex items-center justify-center gap-1.5 transition-all active:scale-[0.98] motion-reduce:transform-none focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-indigo-500 w-full"
-            title={`عرض ملخص مخصص شامل في ${selectedLessons.length} دروس محددة`}
-          >
-            <AppIcon name="fileText" size="sm" className="text-white" />
-            <span>
-              {selectedLessons.length === 1
-                ? 'ملخص الدرس 📝'
-                : `ملخص (${selectedLessons.length} دروس) 📝`}
-            </span>
-          </button>
+          {lessonSummaryEnabled && (
+            <button
+              type="button"
+              onClick={() => onStartSummary(selectedLessons)}
+              className="min-h-[40px] px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-xs flex items-center justify-center gap-1.5 transition-all active:scale-[0.98] motion-reduce:transform-none focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-indigo-500 w-full"
+              title={`عرض ملخص مخصص شامل في ${selectedLessons.length} دروس محددة`}
+            >
+              <AppIcon name="fileText" size="sm" className="text-white" />
+              <span>
+                {selectedLessons.length === 1
+                  ? t.viewer.lessonSummarySingle
+                  : format(t.viewer.lessonSummaryMulti, { count: selectedLessons.length })}
+              </span>
+            </button>
+          )}
         </div>
       )}
     </div>
   );
 };
+

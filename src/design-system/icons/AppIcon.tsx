@@ -22,6 +22,7 @@ export interface AppIconProps extends StandardIconProps {
   name?: IconName;
   icon?: LucideIcon;
   size?: AppIconSize;
+  active?: boolean;
   className?: string;
 }
 
@@ -37,6 +38,7 @@ export const AppIcon: React.FC<AppIconProps> = ({
   name,
   icon,
   size = 'md',
+  active,
   className = '',
   strokeWidth = DEFAULT_ICON_CONFIG.strokeWidth,
   'aria-hidden': ariaHidden = true,
@@ -56,7 +58,7 @@ export const AppIcon: React.FC<AppIconProps> = ({
   return (
     <ResolvedIcon
       size={numericSize}
-      strokeWidth={strokeWidth}
+      strokeWidth={active ? strokeWidth + 0.25 : strokeWidth}
       strokeLinecap={DEFAULT_ICON_CONFIG.strokeLinecap}
       strokeLinejoin={DEFAULT_ICON_CONFIG.strokeLinejoin}
       className={`shrink-0 inline-block align-middle transition-colors ${className}`}

@@ -16,6 +16,7 @@ export interface AIGatewayRequest {
   lessonContext?: string;
   studentLevel?: string;
   language?: string;
+  targetLanguage?: string;
   hintIndex?: number;
   requestSolution?: boolean;
 }
@@ -31,6 +32,7 @@ export interface AIGatewayResponse {
 export type SupportedAITool =
   | 'explain'
   | 'simplify'
+  | 'translate'
   | 'hint'
   | 'quiz'
   | 'analyzeProblem'
@@ -97,6 +99,7 @@ class AIGatewayService {
           lessonContext: params.lessonContext || '',
           studentLevel: params.studentLevel || 'المرحلة المتوسطة',
           language: params.language || 'ar',
+          targetLanguage: params.targetLanguage || 'ar',
           hintIndex: params.hintIndex || 1,
           requestSolution: Boolean(params.requestSolution),
         }),
@@ -198,7 +201,17 @@ class AIGatewayService {
   }
 
   /**
-   * 3. تقديم تلميح ذكي دون كشف الحل
+   * 3. ترجمة النص أو الجزء المحدد إلى اللغة العربية (أو اللغة المستهدفة)
+   */
+  public async translate(
+    params: AIGatewayRequest,
+    signal?: AbortSignal
+  ): Promise<AIGatewayResponse> {
+    return this.sendRequest('translate', params, signal);
+  }
+
+  /**
+   * 4. تقديم تلميح ذكي دون كشف الحل
    */
   public async hint(
     params: AIGatewayRequest,
@@ -208,7 +221,7 @@ class AIGatewayService {
   }
 
   /**
-   * 4. اختبار الفهم بسؤال قصير
+   * 5. اختبار الفهم بسؤال قصير
    */
   public async quiz(
     params: AIGatewayRequest,
@@ -218,7 +231,7 @@ class AIGatewayService {
   }
 
   /**
-   * 5. تحليل المسألة والمعطيات
+   * 6. تحليل المسألة والمعطيات
    */
   public async analyzeProblem(
     params: AIGatewayRequest,
@@ -228,7 +241,7 @@ class AIGatewayService {
   }
 
   /**
-   * 6. شرح الصورة أو الشكل التوضيحي
+   * 7. شرح الصورة أو الشكل التوضيحي
    */
   public async explainImage(
     params: AIGatewayRequest,
@@ -251,6 +264,8 @@ class AIGatewayService {
       case 'stepByStep':
       case 'explain':
         return this.explain(params, signal);
+      case 'translate':
+        return this.translate(params, signal);
       case 'hint':
         return this.hint(params, signal);
       case 'quiz':

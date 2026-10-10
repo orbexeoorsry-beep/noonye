@@ -3,7 +3,6 @@ import * as pdfjsLib from 'pdfjs-dist';
 import { pdfService, RenderResult } from '../../services/pdfService';
 import { PdfInteractionOverlay } from './PdfInteractionOverlay';
 import {
-  PdfSelectionLayer,
   SelectionRegion,
   SelectionActionType,
 } from '../selection';
@@ -13,10 +12,11 @@ interface PdfPageViewProps {
   doc: pdfjsLib.PDFDocumentProxy;
   pageNumber: number;
   scale: number;
-  selection: SelectionRegion | null;
-  isSelectionActive: boolean;
-  onSelectionChange: (sel: SelectionRegion | null, pageNumber: number) => void;
-  onActionClick: (action: SelectionActionType, pageNumber: number) => void;
+  selection?: SelectionRegion | null;
+  isSelectionActive?: boolean;
+  isSelectionModeEnabled?: boolean;
+  onSelectionChange?: (sel: SelectionRegion | null, pageNumber: number) => void;
+  onActionClick?: (action: SelectionActionType, pageNumber: number) => void;
   selectedElementId: string | null;
   onSelectElement: (element: InteractiveElement) => void;
   isOverlayEnabled: boolean;
@@ -28,10 +28,7 @@ export const PdfPageView: React.FC<PdfPageViewProps> = ({
   doc,
   pageNumber,
   scale,
-  selection,
-  isSelectionActive,
-  onSelectionChange,
-  onActionClick,
+  isSelectionModeEnabled = false,
   selectedElementId,
   onSelectElement,
   isOverlayEnabled,
@@ -64,7 +61,7 @@ export const PdfPageView: React.FC<PdfPageViewProps> = ({
       (entries) => {
         entries.forEach((entry) => {
           if (entry.isIntersecting) {
-            setIsInViewport(true);
+            setIsInViewport((prev) => (prev ? prev : true));
             if (entry.intersectionRatio >= 0.5) {
               onPageIntersectRef.current(pageNumber);
             }
@@ -73,7 +70,7 @@ export const PdfPageView: React.FC<PdfPageViewProps> = ({
       },
       {
         root: null,
-        rootMargin: '200px 0px 200px 0px', // Pre-render 200px before scroll enters
+        rootMargin: '300px 0px 300px 0px', // Pre-render 300px before scroll enters for smooth multi-page selection
         threshold: [0, 0.25, 0.5, 0.75, 1.0],
       }
     );
@@ -97,8 +94,15 @@ export const PdfPageView: React.FC<PdfPageViewProps> = ({
       .renderPage(doc, pageNumber, canvas, scale, cancellationToken)
       .then((dims) => {
         if (!cancellationToken.isCancelled) {
-          setDimensions(dims);
-          setIsRendered(true);
+          setDimensions((prev) =>
+            prev.width === dims.width &&
+            prev.height === dims.height &&
+            prev.originalWidth === dims.originalWidth &&
+            prev.originalHeight === dims.originalHeight
+              ? prev
+              : dims
+          );
+          setIsRendered((prev) => (prev ? prev : true));
         }
       })
       .catch((err) => {
@@ -128,6 +132,8 @@ export const PdfPageView: React.FC<PdfPageViewProps> = ({
 
       {/* Page Paper Frame */}
       <div
+        id={`page-frame-${pageNumber}`}
+        data-page-frame={pageNumber}
         className="relative shadow-xl rounded-sm border border-slate-300/80 bg-white overflow-hidden transition-all duration-100"
         style={{
           width: `${dimensions.width}px`,
@@ -147,7 +153,7 @@ export const PdfPageView: React.FC<PdfPageViewProps> = ({
         {/* HTML5 Canvas */}
         <canvas ref={canvasRef} className="block w-full h-full" />
 
-        {/* Smart Interaction Overlay Layer */}
+        {/* Smart Interaction Overlay Layer (Disabled while Region Selection Tool is active) */}
         {isRendered && (
           <PdfInteractionOverlay
             pageNumber={pageNumber}
@@ -155,20 +161,7 @@ export const PdfPageView: React.FC<PdfPageViewProps> = ({
             height={dimensions.height}
             selectedElementId={selectedElementId}
             onSelectElement={onSelectElement}
-            isEnabled={isOverlayEnabled}
-          />
-        )}
-
-        {/* Region Selection Layer */}
-        {isRendered && (
-          <PdfSelectionLayer
-            pageNumber={pageNumber}
-            pageWidth={dimensions.width}
-            pageHeight={dimensions.height}
-            selection={isSelectionActive ? selection : null}
-            onSelectionChange={(sel) => onSelectionChange(sel, pageNumber)}
-            onActionClick={(action) => onActionClick(action, pageNumber)}
-            isEnabled={true}
+            isEnabled={isOverlayEnabled && !isSelectionModeEnabled}
           />
         )}
       </div>

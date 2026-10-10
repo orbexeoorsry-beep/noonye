@@ -30,6 +30,8 @@ export const common: CommonTranslations = {
   english: 'English',
   localPrivacyNotice: 'Private local storage on this browser',
   safeForStudents: 'Safe for students and educators',
+  featureDisabled: 'This feature is currently disabled',
 };
 
 export default common;
+

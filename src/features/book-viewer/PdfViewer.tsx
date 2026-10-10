@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Book, InteractiveElement, UserNote } from '../../types';
 import { useI18n } from '../../i18n';
-import { pdfService, RenderResult } from '../../services/pdfService';
+import { pdfService } from '../../services/pdfService';
 import { localDocumentStore } from '../../services/localDocumentStore';
 import { generateEducationalSamplePdf } from '../../services/samplePdfGenerator';
 import { bookLessonsService, BookLesson } from '../../services/bookLessonsService';
@@ -13,6 +13,7 @@ import { NotesDrawer } from './NotesDrawer';
 import { NoonToolsPanel } from '../ai-assistant/NoonToolsPanel';
 import { storageService } from '../../services/storage';
 import {
+  PdfSelectionLayer,
   SelectionRegion,
   SelectionActionType,
   SelectionToolId,
@@ -69,7 +70,8 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
   const [notes, setNotes] = useState<UserNote[]>([]);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
-  // Region Selection states
+  // Region Selection Tool States (Strictly controlled by the Top Bar button)
+  const [isSelectionModeEnabled, setIsSelectionModeEnabled] = useState<boolean>(false);
   const [selection, setSelection] = useState<SelectionRegion | null>(null);
   const [activeSelectionPage, setActiveSelectionPage] = useState<number>(book.currentPage || 1);
   const [selectedText, setSelectedText] = useState<string>('');
@@ -77,10 +79,21 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
   const [nearbyText, setNearbyText] = useState<string>('');
   const [isSelectionPanelOpen, setIsSelectionPanelOpen] = useState(false);
   const [activeSelectionTool, setActiveSelectionTool] = useState<SelectionToolId>('simplify');
+  const [selectionActionNonce, setSelectionActionNonce] = useState<number>(0);
   const [actionFeedbackToast, setActionFeedbackToast] = useState<string | null>(null);
   const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prevSelectionKeyRef = useRef<string>('');
   const lastSavedPageRef = useRef<number>(book.currentPage || 1);
+
+  const showToastMessage = useCallback((msg: string, duration = 2600) => {
+    if (toastTimeoutRef.current) {
+      clearTimeout(toastTimeoutRef.current);
+    }
+    setActionFeedbackToast(msg);
+    toastTimeoutRef.current = setTimeout(() => {
+      setActionFeedbackToast(null);
+    }, duration);
+  }, []);
 
   // Floating vertical page widget auto-hide state & timer
   const [isFloatingNavVisible, setIsFloatingNavVisible] = useState(true);
@@ -104,6 +117,28 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
       }
     };
   }, [resetFloatingNavTimer]);
+
+  // Smooth scroll to a target page container
+  const scrollToPage = useCallback((pageNum: number) => {
+    const target = Math.max(1, Math.min(totalPages, pageNum));
+    setCurrentPage((prev) => (prev !== target ? target : prev));
+    const element = document.getElementById(`page-container-${target}`);
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [totalPages]);
+
+  const handlePrevPage = useCallback(() => {
+    if (currentPage > 1) {
+      scrollToPage(currentPage - 1);
+    }
+  }, [currentPage, scrollToPage]);
+
+  const handleNextPage = useCallback(() => {
+    if (currentPage < totalPages) {
+      scrollToPage(currentPage + 1);
+    }
+  }, [currentPage, totalPages, scrollToPage]);
 
   // Continuous page scrolling during long press (holding arrow keys)
   const longPressTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -162,8 +197,8 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
             return prev;
           });
         }
-      }, 250); // repetition speed
-    }, 350); // delay before holding starts repeating
+      }, 250);
+    }, 350);
   }, [handlePrevPage, handleNextPage, totalPages, stopContinuousPageScroll]);
 
   // Clean up on unmount
@@ -174,30 +209,76 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
     };
   }, []);
 
-  // Helper to extract high quality cropped base64 image from the rendered canvas of a specific page
+  /**
+   * Helper to extract high quality cropped base64 image from 1 or multiple pages
+   * (stitches multiple page slices vertically when selection crosses page boundaries)
+   */
   const getSelectedCropBase64 = useCallback(
-    (sel: SelectionRegion | null, pageNum: number): string => {
+    (sel: SelectionRegion | null, fallbackPageNum: number): string => {
       if (!sel) return '';
-      const canvas = canvasMapRef.current.get(pageNum);
-      if (!canvas) return '';
+
+      const slices =
+        sel.pageSlices && sel.pageSlices.length > 0
+          ? sel.pageSlices
+          : [
+              {
+                pageNumber: sel.pageNumber || fallbackPageNum,
+                xPct: sel.xPct,
+                yPct: sel.yPct,
+                widthPct: sel.widthPct,
+                heightPct: sel.heightPct,
+              },
+            ];
 
       try {
-        const x = Math.max(0, (sel.xPct / 100) * canvas.width);
-        const y = Math.max(0, (sel.yPct / 100) * canvas.height);
-        const w = Math.min(canvas.width - x, (sel.widthPct / 100) * canvas.width);
-        const h = Math.min(canvas.height - y, (sel.heightPct / 100) * canvas.height);
+        const validParts: Array<{
+          canvas: HTMLCanvasElement;
+          x: number;
+          y: number;
+          w: number;
+          h: number;
+        }> = [];
 
-        if (w < 8 || h < 8) return '';
+        for (const slice of slices) {
+          const canvas = canvasMapRef.current.get(slice.pageNumber);
+          if (!canvas) continue;
+
+          const x = Math.max(0, (slice.xPct / 100) * canvas.width);
+          const y = Math.max(0, (slice.yPct / 100) * canvas.height);
+          const w = Math.min(canvas.width - x, (slice.widthPct / 100) * canvas.width);
+          const h = Math.min(canvas.height - y, (slice.heightPct / 100) * canvas.height);
+
+          if (w >= 8 && h >= 8) {
+            validParts.push({ canvas, x, y, w, h });
+          }
+        }
+
+        if (validParts.length === 0) return '';
+
+        const totalRawWidth = Math.max(...validParts.map((p) => p.w));
+        const totalRawHeight = validParts.reduce((acc, p) => acc + p.h, 0);
+
+        const maxDim = 1200;
+        const scaleFactor = Math.min(1, maxDim / Math.max(totalRawWidth, totalRawHeight));
 
         const cropCanvas = document.createElement('canvas');
-        const maxDim = 1000;
-        const scaleFactor = Math.min(1, maxDim / Math.max(w, h));
-        cropCanvas.width = Math.round(w * scaleFactor);
-        cropCanvas.height = Math.round(h * scaleFactor);
+        cropCanvas.width = Math.max(1, Math.round(totalRawWidth * scaleFactor));
+        cropCanvas.height = Math.max(1, Math.round(totalRawHeight * scaleFactor));
 
         const ctx = cropCanvas.getContext('2d');
         if (!ctx) return '';
-        ctx.drawImage(canvas, x, y, w, h, 0, 0, cropCanvas.width, cropCanvas.height);
+
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, cropCanvas.width, cropCanvas.height);
+
+        let currentDestY = 0;
+        for (const part of validParts) {
+          const destW = Math.round(part.w * scaleFactor);
+          const destH = Math.round(part.h * scaleFactor);
+          ctx.drawImage(part.canvas, part.x, part.y, part.w, part.h, 0, currentDestY, destW, destH);
+          currentDestY += destH;
+        }
+
         return cropCanvas.toDataURL('image/jpeg', 0.82);
       } catch {
         return '';
@@ -219,15 +300,12 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
       let data: ArrayBuffer | Uint8Array | null = null;
 
       if (currentBook.source === 'local') {
-        // 1. Load binary data strictly from IndexedDB for local user books
         data = await localDocumentStore.getDocumentData(currentBook.id);
         if (!data) {
-          // Fallback if binary was not found
           const generated = generateEducationalSamplePdf();
           data = generated.buffer as ArrayBuffer;
         }
       } else {
-        // 2. Admin books: Loaded directly from demo memory/generator without polluting IndexedDB LocalDocumentStore
         const generated = generateEducationalSamplePdf();
         data = generated.buffer as ArrayBuffer;
       }
@@ -277,49 +355,75 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
   useEffect(() => {
     if (lessons.length > 0) {
       const match = bookLessonsService.findLessonForPage(lessons, currentPage);
-      if (match && match.id !== activeLesson?.id) {
-        setActiveLesson(match);
+      if (match) {
+        setActiveLesson((prev) => (prev?.id !== match.id ? match : prev));
       }
     }
-  }, [currentPage, lessons, activeLesson?.id]);
+  }, [currentPage, lessons]);
 
-  // Extract text and cropped image from selection region
+  // Extract text and cropped image from selection region (Supports Single Page & Multi-Page Slices)
   useEffect(() => {
     let isCancelled = false;
     if (selection && pdfDoc && selection.widthPct > 0 && selection.heightPct > 0) {
-      const selKey = `${activeSelectionPage}-${selection.xPct.toFixed(1)}-${selection.yPct.toFixed(1)}-${selection.widthPct.toFixed(1)}-${selection.heightPct.toFixed(1)}`;
+      const endP = selection.endPageNumber || activeSelectionPage;
+      const selKey = `${activeSelectionPage}-${endP}-${selection.xPct.toFixed(1)}-${selection.yPct.toFixed(1)}-${selection.widthPct.toFixed(1)}-${selection.heightPct.toFixed(1)}-${selection.docRect?.height?.toFixed(0) || 0}`;
       if (prevSelectionKeyRef.current === selKey) return;
       prevSelectionKeyRef.current = selKey;
 
       const cropBase64 = getSelectedCropBase64(selection, activeSelectionPage);
       if (cropBase64) {
-        setSelectedImage(cropBase64);
+        setSelectedImage((prev) => (prev !== cropBase64 ? cropBase64 : prev));
       }
 
-      pdfService.extractTextFromRegion(pdfDoc, activeSelectionPage, selection).then((text) => {
-        if (!isCancelled) {
-          setSelectedText((prev) => (prev !== text ? text : prev));
-        }
-      });
+      const slices =
+        selection.pageSlices && selection.pageSlices.length > 0
+          ? selection.pageSlices
+          : [
+              {
+                pageNumber: selection.pageNumber || activeSelectionPage,
+                xPct: selection.xPct,
+                yPct: selection.yPct,
+                widthPct: selection.widthPct,
+                heightPct: selection.heightPct,
+              },
+            ];
 
-      // Extract surrounding text for context
-      const nearbyRegion = {
-        xPct: Math.max(0, selection.xPct - 8),
-        yPct: Math.max(0, selection.yPct - 8),
-        widthPct: Math.min(100 - Math.max(0, selection.xPct - 8), selection.widthPct + 16),
-        heightPct: Math.min(100 - Math.max(0, selection.yPct - 8), selection.heightPct + 16),
-      };
-      pdfService.extractTextFromRegion(pdfDoc, activeSelectionPage, nearbyRegion).then((surrounding) => {
-        if (!isCancelled && surrounding) {
-          setNearbyText((prev) => (prev !== surrounding ? surrounding : prev));
-        }
+      Promise.all([
+        Promise.all(
+          slices.map((slice) => pdfService.extractTextFromRegion(pdfDoc, slice.pageNumber, slice))
+        ),
+        Promise.all(
+          slices.map((slice) => {
+            const nearbyRegion = {
+              xPct: Math.max(0, slice.xPct - 12),
+              yPct: Math.max(0, slice.yPct - 10),
+              widthPct: Math.min(100 - Math.max(0, slice.xPct - 12), slice.widthPct + 24),
+              heightPct: Math.min(100 - Math.max(0, slice.yPct - 10), slice.heightPct + 20),
+            };
+            return pdfService.extractTextFromRegion(pdfDoc, slice.pageNumber, nearbyRegion);
+          })
+        ),
+      ]).then(([texts, surroundingList]) => {
+        if (isCancelled) return;
+
+        const combined = texts
+          .map((txt) => txt.trim())
+          .filter(Boolean)
+          .join('\n\n');
+        setSelectedText((prev) => (prev !== combined ? combined : prev));
+
+        const combinedSurrounding = surroundingList
+          .map((txt) => txt.trim())
+          .filter(Boolean)
+          .join('\n\n');
+        setNearbyText((prev) => (prev !== combinedSurrounding ? combinedSurrounding : prev));
       });
     } else {
       if (prevSelectionKeyRef.current !== '') {
         prevSelectionKeyRef.current = '';
-        setSelectedText('');
-        setSelectedImage('');
-        setNearbyText('');
+        setSelectedText((prev) => (prev !== '' ? '' : prev));
+        setSelectedImage((prev) => (prev !== '' ? '' : prev));
+        setNearbyText((prev) => (prev !== '' ? '' : prev));
       }
     }
     return () => {
@@ -336,7 +440,10 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
         onUpdatePageNumber(book.id, currentPage);
       }
       const pageNotes = storageService.getNotes(book.id, currentPage);
-      setNotes(pageNotes);
+      setNotes((prev) => {
+        if (prev.length === 0 && pageNotes.length === 0) return prev;
+        return pageNotes;
+      });
     }
   }, [book.id, currentPage, onUpdatePageNumber]);
 
@@ -348,16 +455,6 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
       }
     };
   }, []);
-
-  // Smooth scroll to a target page container
-  const scrollToPage = useCallback((pageNum: number) => {
-    const target = Math.max(1, Math.min(totalPages, pageNum));
-    setCurrentPage(target);
-    const element = document.getElementById(`page-container-${target}`);
-    if (element) {
-      element.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-  }, [totalPages]);
 
   // Handle lesson selection from the horizontal LessonsBar
   const handleSelectLesson = useCallback((lesson: BookLesson) => {
@@ -387,11 +484,32 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
     setIsSummaryOpen(true);
   }, []);
 
+  // Toggle Selection Tool Mode from the Top Toolbar
+  const handleToggleSelectionMode = useCallback(() => {
+    setIsSelectionModeEnabled((prev) => {
+      const next = !prev;
+      if (!next) {
+        setSelection(null);
+        setIsSelectionPanelOpen(false);
+        showToastMessage(isRTL ? 'تم إيقاف أداة التحديد' : 'Selection tool disabled', 1800);
+      } else {
+        showToastMessage(
+          isRTL
+            ? 'أداة التحديد مفعّلة — اسحب بالمؤشر لتحديد جزء أو أكثر من ورقة'
+            : 'Selection tool enabled — drag across one or more pages',
+          2800
+        );
+      }
+      return next;
+    });
+  }, [isRTL, showToastMessage]);
+
   // Selection actions
   const handleSelectionAction = useCallback(async (action: SelectionActionType, pageNum: number) => {
     let toolId: SelectionToolId = 'simplify';
     if (action === 'explain') toolId = 'stepByStep';
     else if (action === 'simplify') toolId = 'simplify';
+    else if (action === 'translate') toolId = 'translate';
     else if (action === 'hint') toolId = 'hint';
     else if (action === 'quiz') toolId = 'quiz';
     else if (action === 'analyze') toolId = 'analyze';
@@ -405,24 +523,56 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
         setSelectedImage(crop);
       }
     }
-    if (selection && pdfDoc && !selectedText) {
-      const text = await pdfService.extractTextFromRegion(pdfDoc, pageNum, selection);
-      if (text) {
-        setSelectedText(text);
-      }
+    if (selection && pdfDoc) {
+      const slices =
+        selection.pageSlices && selection.pageSlices.length > 0
+          ? selection.pageSlices
+          : [
+              {
+                pageNumber: selection.pageNumber || pageNum,
+                xPct: selection.xPct,
+                yPct: selection.yPct,
+                widthPct: selection.widthPct,
+                heightPct: selection.heightPct,
+              },
+            ];
+      const [texts, surroundingList] = await Promise.all([
+        Promise.all(slices.map((s) => pdfService.extractTextFromRegion(pdfDoc, s.pageNumber, s))),
+        Promise.all(
+          slices.map((s) => {
+            const nearbyRegion = {
+              xPct: Math.max(0, s.xPct - 12),
+              yPct: Math.max(0, s.yPct - 10),
+              widthPct: Math.min(100 - Math.max(0, s.xPct - 12), s.widthPct + 24),
+              heightPct: Math.min(100 - Math.max(0, s.yPct - 10), s.heightPct + 20),
+            };
+            return pdfService.extractTextFromRegion(pdfDoc, s.pageNumber, nearbyRegion);
+          })
+        ),
+      ]);
+      const joined = texts.map((t) => t.trim()).filter(Boolean).join('\n\n');
+      setSelectedText(joined);
+
+      const joinedNearby = surroundingList.map((t) => t.trim()).filter(Boolean).join('\n\n');
+      setNearbyText(joinedNearby);
     }
 
     setActiveSelectionTool(toolId);
     setIsSelectionPanelOpen(true);
-  }, [selection, pdfDoc, selectedText, getSelectedCropBase64]);
+    setSelectionActionNonce((n) => n + 1);
+  }, [selection, pdfDoc, getSelectedCropBase64]);
 
   const handlePageIntersect = useCallback((pNum: number) => {
     setCurrentPage((prev) => (prev !== pNum ? pNum : prev));
   }, []);
 
-  const handleSelectionChange = useCallback((sel: SelectionRegion | null, pNum: number) => {
+  const handleSelectionChange = useCallback((sel: SelectionRegion | null, pNum?: number) => {
     setSelection(sel);
-    setActiveSelectionPage(pNum);
+    if (pNum) {
+      setActiveSelectionPage((prev) => (prev !== pNum ? pNum : prev));
+    } else if (sel?.pageNumber) {
+      setActiveSelectionPage((prev) => (prev !== sel.pageNumber ? sel.pageNumber! : prev));
+    }
     if (!sel) {
       setIsSelectionPanelOpen(false);
     }
@@ -443,13 +593,15 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
 
   const handleOpenNoonTools = () => {
     if (!selection) {
-      if (toastTimeoutRef.current) {
-        clearTimeout(toastTimeoutRef.current);
+      if (!isSelectionModeEnabled) {
+        setIsSelectionModeEnabled(true);
       }
-      setActionFeedbackToast(isRTL ? 'حدد فقرة أو صورة أو مسألة أولًا.' : 'Please select a paragraph or problem first.');
-      toastTimeoutRef.current = setTimeout(() => {
-        setActionFeedbackToast(null);
-      }, 3000);
+      showToastMessage(
+        isRTL
+          ? 'تم تفعيل أداة التحديد — اسحب بالمؤشر لتحديد فقرة أو مسألة أولًا.'
+          : 'Selection tool enabled — please drag to select a region first.',
+        3000
+      );
       return;
     }
     setIsSelectionPanelOpen(true);
@@ -464,61 +616,17 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
     setScale((prev) => Math.max(0.5, +(prev - 0.15).toFixed(2)));
   };
 
-  const handleResetZoom = () => {
-    setScale(1.0);
-  };
-
   const handleFitWidth = () => {
     if (!panContainerRef.current) return;
     const containerWidth = panContainerRef.current.clientWidth - 40;
-    // Standard standard page width ~ 595px
     const newScale = containerWidth / 595;
     setScale(Math.max(0.5, Math.min(2.5, +newScale.toFixed(2))));
-  };
-
-  // Page Switcher Navigation
-  function handlePrevPage() {
-    if (currentPage > 1) {
-      scrollToPage(currentPage - 1);
-    }
-  }
-
-  function handleNextPage() {
-    if (currentPage < totalPages) {
-      scrollToPage(currentPage + 1);
-    }
-  }
-
-  const handlePageJumpSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const pageNum = parseInt(pageJumpInput.trim(), 10);
-    if (isNaN(pageNum) || pageNum < 1 || pageNum > totalPages) {
-      setPageJumpError(format(t.viewer.invalidPageError, { total: totalPages }));
-      setTimeout(() => setPageJumpError(null), 3500);
-      return;
-    }
-    scrollToPage(pageNum);
-    setPageJumpInput('');
-    setPageJumpError(null);
-  };
-
-  // Fullscreen
-  const handleToggleFullscreen = () => {
-    if (!document.fullscreenElement) {
-      containerRef.current?.requestFullscreen?.();
-      setIsFullscreen(true);
-    } else {
-      document.exitFullscreen?.();
-      setIsFullscreen(false);
-    }
   };
 
   // Element Selection
   const handleSelectElement = useCallback((elem: InteractiveElement) => {
     setSelectedElement(elem);
-    if (window.innerWidth < 768) {
-      setIsAiToolsOpen(true);
-    }
+    setIsAiToolsOpen(true);
   }, []);
 
   // Notes
@@ -588,7 +696,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
             </div>
           </div>
 
-          {/* Right Toolbar: Zoom controls, Fit width, Region selection, Notes & Noon Tools */}
+          {/* Right Toolbar: Zoom controls, Fit width, Region selection toggle, Notes & Noon Tools */}
           <div className="flex items-center gap-1 sm:gap-1.5">
             {/* Zoom Controls */}
             <div className="flex items-center bg-slate-100/90 rounded-xl p-0.5 border border-slate-200/60">
@@ -626,22 +734,31 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
               </IconButton>
             </div>
 
-            {/* Region Selection Tool Button */}
+            {/* Region Selection Tool Toggle Button (Works ONLY when active in top bar) */}
             <IconButton
               name="crop"
               iconSize="sm"
-              variant={selection ? 'primary' : 'outline'}
-              label={selection ? t.selection.clearSelection : isRTL ? 'تحديد جزء' : 'Select'}
-              tooltip={selection ? t.selection.clearSelection : t.selection.dragToSelect}
-              onClick={() => {
-                if (selection) {
-                  setSelection(null);
-                }
-              }}
-              className="px-3 min-h-[44px]"
+              variant={isSelectionModeEnabled ? 'primary' : 'outline'}
+              active={isSelectionModeEnabled}
+              label={isRTL ? 'تحديد جزء' : 'Select'}
+              tooltip={
+                isSelectionModeEnabled
+                  ? isRTL
+                    ? 'أداة التحديد مفعّلة (اضغط لإغلاق التحديد)'
+                    : 'Selection active (Click to disable)'
+                  : isRTL
+                  ? 'تفعيل أداة التحديد لتحديد جزء أو أكثر من ورقة'
+                  : 'Enable selection tool'
+              }
+              onClick={handleToggleSelectionMode}
+              className={`px-3 min-h-[44px] transition-all ${
+                isSelectionModeEnabled
+                  ? 'ring-2 ring-indigo-400/80 shadow-sm'
+                  : ''
+              }`}
             >
               <span className="hidden lg:inline">
-                {selection ? t.selection.clearSelection : isRTL ? 'تحديد جزء' : 'Select'}
+                {isRTL ? 'تحديد جزء' : 'Select'}
               </span>
             </IconButton>
 
@@ -689,7 +806,6 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
 
         {/* Row 2: Horizontal Scrollable Lessons Bar */}
         <div className="px-3 sm:px-6 py-1.5 bg-slate-50/90 border-t border-slate-200/80 flex items-center justify-between gap-3">
-          {/* Lessons Horizontal Scrolling Bar */}
           <LessonsBar
             lessons={lessons}
             activeLesson={activeLesson}
@@ -835,19 +951,16 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
               </div>
             </div>
           ) : (
-            /* Continuous Vertical List of Book Pages */
+            /* Continuous Vertical List of Book Pages + Cross-Page Selection Layer */
             pdfDoc && (
-              <div className="flex flex-col items-center w-full max-w-full pb-16">
+              <div className="relative flex flex-col items-center w-full max-w-full pb-16">
                 {pageList.map((pageNum) => (
                   <PdfPageView
                     key={pageNum}
                     doc={pdfDoc}
                     pageNumber={pageNum}
                     scale={scale}
-                    selection={activeSelectionPage === pageNum ? selection : null}
-                    isSelectionActive={activeSelectionPage === pageNum && Boolean(selection)}
-                    onSelectionChange={handleSelectionChange}
-                    onActionClick={handleActionClick}
+                    isSelectionModeEnabled={isSelectionModeEnabled}
                     selectedElementId={selectedElement?.id || null}
                     onSelectElement={handleSelectElement}
                     isOverlayEnabled={isOverlayEnabled}
@@ -855,6 +968,16 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
                     setCanvasRef={handleSetCanvasRef}
                   />
                 ))}
+
+                {/* Unified Cross-Page Selection Layer (Active ONLY when top-bar selection button is enabled) */}
+                <PdfSelectionLayer
+                  pageNumber={activeSelectionPage || currentPage}
+                  selection={selection}
+                  onSelectionChange={handleSelectionChange}
+                  onActionClick={handleActionClick}
+                  isEnabled={isSelectionModeEnabled}
+                  scrollContainerRef={panContainerRef}
+                />
               </div>
             )
           )}
@@ -869,7 +992,11 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
             totalPages={totalPages}
             selection={selection}
             activeTool={activeSelectionTool}
-            onSelectTool={(toolId) => setActiveSelectionTool(toolId)}
+            actionTrigger={selectionActionNonce}
+            onSelectTool={(toolId) => {
+              setActiveSelectionTool(toolId);
+              setSelectionActionNonce((n) => n + 1);
+            }}
             onBackToPage={() => setIsSelectionPanelOpen(false)}
             selectedText={selectedText}
             selectedImage={selectedImage}
@@ -915,6 +1042,8 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
         onClose={() => setIsSummaryOpen(false)}
         selectedLessons={summaryTargetLessons}
         bookTitle={book.title}
+        pdfDoc={pdfDoc}
+        onJumpToPage={(pNum) => scrollToPage(pNum)}
       />
 
       {/* Delete Book Confirmation Dialog */}

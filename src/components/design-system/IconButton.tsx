@@ -3,6 +3,7 @@ import React from 'react';
 export interface IconButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: 'default' | 'ghost' | 'primary' | 'danger';
   size?: 'sm' | 'md' | 'lg';
+  active?: boolean;
   icon: React.ReactNode;
   label?: string;
 }
@@ -11,6 +12,7 @@ export const IconButton: React.FC<IconButtonProps> = ({
   icon,
   variant = 'default',
   size = 'md',
+  active,
   label,
   className = '',
   disabled,
@@ -37,6 +39,7 @@ export const IconButton: React.FC<IconButtonProps> = ({
       className={`${baseClasses} ${sizeClasses} ${variantClasses} ${className}`}
       disabled={disabled}
       aria-label={label}
+      aria-pressed={typeof active === 'boolean' ? active : undefined}
       title={label}
       {...props}
     >

@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { scienceAnalysisService } from '../services/scienceAnalysisService';
 import { useI18n } from '../../../i18n';
+import { isFeatureEnabled } from '../../../config/feature-flags';
 
 export interface ImageAnalysisViewProps {
   text: string;
@@ -59,6 +60,12 @@ export const ImageAnalysisView: React.FC<ImageAnalysisViewProps> = ({
 }) => {
   const { t } = useI18n();
 
+  if (!isFeatureEnabled('scienceAnalysisEnabled')) {
+    return null;
+  }
+
+  const guidedMathEnabled = isFeatureEnabled('guidedMathEnabled');
+
   if (scienceAnalysisService.isUnclearImage(text)) {
     return (
       <div className="p-4 rounded-2xl border border-amber-200 bg-amber-50 text-start space-y-2 animate-in fade-in duration-150">
@@ -97,7 +104,7 @@ export const ImageAnalysisView: React.FC<ImageAnalysisViewProps> = ({
       </div>
 
       {/* Suggestion to switch to Math Analysis */}
-      {parsed.suggestsMathAnalysis && (
+      {parsed.suggestsMathAnalysis && guidedMathEnabled && (
         <div className="p-3 rounded-2xl bg-indigo-50 border border-indigo-200 flex items-center justify-between gap-2">
           <span className="text-[11px] font-bold text-indigo-900 leading-tight">
             {t.science?.switchMathPrompt || 'يحتوي هذا العنصر على مسألة أو معادلة رياضية.'}

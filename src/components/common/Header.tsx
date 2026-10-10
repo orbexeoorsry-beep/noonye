@@ -4,6 +4,7 @@ import { useI18n } from '../../i18n';
 import { ActivePage } from '../../types';
 import { SettingsModal } from './SettingsModal';
 import { AppIcon, IconButton } from '../../design-system';
+import { isFeatureEnabled } from '../../config/feature-flags';
 
 interface HeaderProps {
   activePage: ActivePage;
@@ -15,6 +16,7 @@ export const Header: React.FC<HeaderProps> = ({ activePage, onNavigate }) => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   const toggleLanguage = () => {
+    if (!isFeatureEnabled('englishLanguageEnabled')) return;
     setLanguage(lang === 'ar' ? 'en' : 'ar');
   };
 
@@ -24,7 +26,8 @@ export const Header: React.FC<HeaderProps> = ({ activePage, onNavigate }) => {
     { id: 'progress', label: t.nav.progress },
   ];
 
-  const showAddBookAction = activePage === 'home' || activePage === 'progress';
+  const showAddBookAction =
+    isFeatureEnabled('localBooksEnabled') && (activePage === 'home' || activePage === 'progress');
 
   return (
     <>
@@ -64,14 +67,16 @@ export const Header: React.FC<HeaderProps> = ({ activePage, onNavigate }) => {
           </nav>
 
           <div className="flex shrink-0 items-center gap-1 sm:gap-2">
-            <button
-              type="button"
-              onClick={toggleLanguage}
-              aria-label={isRTL ? 'تبديل اللغة / Switch language' : 'Switch language / تبديل اللغة'}
-              className="min-h-10 rounded-lg px-2 text-xs font-medium text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-indigo-500 sm:px-3"
-            >
-              {lang === 'ar' ? 'English' : 'عربي'}
-            </button>
+            {isFeatureEnabled('englishLanguageEnabled') && (
+              <button
+                type="button"
+                onClick={toggleLanguage}
+                aria-label={t.common.switchLanguage}
+                className="min-h-10 rounded-lg px-2 text-xs font-medium text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-indigo-500 sm:px-3"
+              >
+                {lang === 'ar' ? t.common.english : t.common.arabic}
+              </button>
+            )}
 
             <IconButton
               name="settings"
@@ -99,3 +104,4 @@ export const Header: React.FC<HeaderProps> = ({ activePage, onNavigate }) => {
     </>
   );
 };
+

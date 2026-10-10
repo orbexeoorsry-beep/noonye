@@ -4,6 +4,7 @@ import { useI18n } from '../i18n';
 import { BookCard } from '../features/library/BookCard';
 import { EmptyState } from '../components/common/EmptyState';
 import { AppIcon, IconButton } from '../design-system';
+import { isFeatureEnabled } from '../config/feature-flags';
 
 interface LibraryProps {
   books: Book[];
@@ -21,6 +22,7 @@ export const Library: React.FC<LibraryProps> = ({
   onClearAllLocalBooks,
 }) => {
   const { t } = useI18n();
+  const localBooksEnabled = isFeatureEnabled('localBooksEnabled');
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<'all' | 'demo' | 'local'>('all');
   const [showClearConfirm, setShowClearConfirm] = useState(false);
@@ -32,13 +34,13 @@ export const Library: React.FC<LibraryProps> = ({
   }, [books]);
 
   const localBooks = useMemo(() => {
-    if (!Array.isArray(books)) return [];
+    if (!localBooksEnabled || !Array.isArray(books)) return [];
     return books.filter((b) => b.source === 'local');
-  }, [books]);
+  }, [books, localBooksEnabled]);
 
   // 2. Filtered collections
   const filteredNoonBooks = useMemo(() => {
-    if (filterType === 'local') return [];
+    if (localBooksEnabled && filterType === 'local') return [];
     const query = (searchQuery || '').toLowerCase().trim();
     if (!query) return noonBooks;
     return noonBooks.filter((book) => {
@@ -47,10 +49,10 @@ export const Library: React.FC<LibraryProps> = ({
       const grade = (book.gradeLevel || '').toLowerCase();
       return title.includes(query) || subject.includes(query) || grade.includes(query);
     });
-  }, [noonBooks, searchQuery, filterType]);
+  }, [noonBooks, searchQuery, filterType, localBooksEnabled]);
 
   const filteredLocalBooks = useMemo(() => {
-    if (filterType === 'demo') return [];
+    if (!localBooksEnabled || filterType === 'demo') return [];
     const query = (searchQuery || '').toLowerCase().trim();
     if (!query) return localBooks;
     return localBooks.filter((book) => {
@@ -59,16 +61,17 @@ export const Library: React.FC<LibraryProps> = ({
       const grade = (book.gradeLevel || '').toLowerCase();
       return title.includes(query) || subject.includes(query) || grade.includes(query);
     });
-  }, [localBooks, searchQuery, filterType]);
+  }, [localBooks, searchQuery, filterType, localBooksEnabled]);
 
   const handleClearAllConfirmed = () => {
     setShowClearConfirm(false);
-    if (onClearAllLocalBooks) {
+    if (localBooksEnabled && onClearAllLocalBooks) {
       onClearAllLocalBooks();
     }
   };
 
-  const hasAnyResults = filteredNoonBooks.length > 0 || filteredLocalBooks.length > 0;
+  const hasAnyResults =
+    filteredNoonBooks.length > 0 || (localBooksEnabled && filteredLocalBooks.length > 0);
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full">
@@ -83,29 +86,31 @@ export const Library: React.FC<LibraryProps> = ({
           </p>
         </div>
 
-        <div className="flex items-center gap-2 self-start sm:self-auto">
-          {localBooks.length > 0 && onClearAllLocalBooks && (
-            <IconButton
-              name="delete"
-              iconSize="sm"
-              variant="danger"
-              label={t.library.clearAllLocal}
-              onClick={() => setShowClearConfirm(true)}
-              className="px-3.5"
-            >
-              <span>{t.library.clearAllLocal}</span>
-            </IconButton>
-          )}
+        {localBooksEnabled && (
+          <div className="flex items-center gap-2 self-start sm:self-auto">
+            {localBooks.length > 0 && onClearAllLocalBooks && (
+              <IconButton
+                name="delete"
+                iconSize="sm"
+                variant="danger"
+                label={t.library.clearAllLocal}
+                onClick={() => setShowClearConfirm(true)}
+                className="px-3.5"
+              >
+                <span>{t.library.clearAllLocal}</span>
+              </IconButton>
+            )}
 
-          <button
-            type="button"
-            onClick={() => onNavigate('add-book')}
-            className="min-h-[44px] px-5 py-2.5 rounded-xl bg-slate-900 text-white font-bold text-xs sm:text-sm hover:bg-slate-800 transition-all shadow-xs active:scale-[0.98] motion-reduce:transform-none flex items-center gap-2 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-indigo-500"
-          >
-            <AppIcon name="addBook" size="sm" />
-            <span>{t.actions.addBook}</span>
-          </button>
-        </div>
+            <button
+              type="button"
+              onClick={() => onNavigate('add-book')}
+              className="min-h-[44px] px-5 py-2.5 rounded-xl bg-slate-900 text-white font-bold text-xs sm:text-sm hover:bg-slate-800 transition-all shadow-xs active:scale-[0.98] motion-reduce:transform-none flex items-center gap-2 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-indigo-500"
+            >
+              <AppIcon name="addBook" size="sm" />
+              <span>{t.actions.addBook}</span>
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Search and Segmented Filter Bar */}
@@ -138,85 +143,88 @@ export const Library: React.FC<LibraryProps> = ({
         </div>
 
         {/* Segmented Filter Controls */}
-        <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-xl w-full sm:w-auto">
-          <button
-            type="button"
-            onClick={() => setFilterType('all')}
-            className={`min-h-[40px] flex-1 sm:flex-none px-3.5 py-1 text-xs font-semibold rounded-lg transition-colors whitespace-nowrap active:scale-[0.98] motion-reduce:transform-none ${
-              filterType === 'all'
-                ? 'bg-white text-slate-900 shadow-xs'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            {t.actions.all} ({noonBooks.length + localBooks.length})
-          </button>
-          <button
-            type="button"
-            onClick={() => setFilterType('demo')}
-            className={`min-h-[40px] flex-1 sm:flex-none px-3.5 py-1 text-xs font-semibold rounded-lg transition-colors whitespace-nowrap active:scale-[0.98] motion-reduce:transform-none ${
-              filterType === 'demo'
-                ? 'bg-white text-slate-900 shadow-xs'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            {t.library.noonBooksSection} ({noonBooks.length})
-          </button>
-          <button
-            type="button"
-            onClick={() => setFilterType('local')}
-            className={`min-h-[40px] flex-1 sm:flex-none px-3.5 py-1 text-xs font-semibold rounded-lg transition-colors whitespace-nowrap active:scale-[0.98] motion-reduce:transform-none ${
-              filterType === 'local'
-                ? 'bg-white text-slate-900 shadow-xs'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            {t.library.localBooksSection} ({localBooks.length})
-          </button>
-        </div>
+        {localBooksEnabled && (
+          <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-xl w-full sm:w-auto">
+            <button
+              type="button"
+              onClick={() => setFilterType('all')}
+              className={`min-h-[40px] flex-1 sm:flex-none px-3.5 py-1 text-xs font-semibold rounded-lg transition-colors whitespace-nowrap active:scale-[0.98] motion-reduce:transform-none ${
+                filterType === 'all'
+                  ? 'bg-white text-slate-900 shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              {t.actions.all} ({noonBooks.length + localBooks.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setFilterType('demo')}
+              className={`min-h-[40px] flex-1 sm:flex-none px-3.5 py-1 text-xs font-semibold rounded-lg transition-colors whitespace-nowrap active:scale-[0.98] motion-reduce:transform-none ${
+                filterType === 'demo'
+                  ? 'bg-white text-slate-900 shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              {t.library.noonBooksSection} ({noonBooks.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setFilterType('local')}
+              className={`min-h-[40px] flex-1 sm:flex-none px-3.5 py-1 text-xs font-semibold rounded-lg transition-colors whitespace-nowrap active:scale-[0.98] motion-reduce:transform-none ${
+                filterType === 'local'
+                  ? 'bg-white text-slate-900 shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              {t.library.localBooksSection} ({localBooks.length})
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Main Content Areas */}
       {hasAnyResults ? (
         <div className="space-y-12">
           {/* SECTION 1: كتب نون (Admin Curated Textbooks) */}
-          {(filterType === 'all' || filterType === 'demo') && filteredNoonBooks.length > 0 && (
-            <section aria-labelledby="noon-books-heading" className="space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center">
-                    <AppIcon name="sparkles" size="sm" />
-                  </div>
-                  <div>
-                    <h2
-                      id="noon-books-heading"
-                      className="text-lg sm:text-xl font-bold text-slate-900 font-display flex items-center gap-2"
-                    >
-                      <span>{t.library.noonBooksSection}</span>
-                      <span className="text-xs font-semibold px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 font-sans">
-                        {filteredNoonBooks.length}
-                      </span>
-                    </h2>
-                    <p className="text-xs text-slate-500 font-sans">
-                      {t.library.noonBooksSubtitle}
-                    </p>
+          {(!localBooksEnabled || filterType === 'all' || filterType === 'demo') &&
+            filteredNoonBooks.length > 0 && (
+              <section aria-labelledby="noon-books-heading" className="space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                      <AppIcon name="sparkles" size="sm" />
+                    </div>
+                    <div>
+                      <h2
+                        id="noon-books-heading"
+                        className="text-lg sm:text-xl font-bold text-slate-900 font-display flex items-center gap-2"
+                      >
+                        <span>{t.library.noonBooksSection}</span>
+                        <span className="text-xs font-semibold px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 font-sans">
+                          {filteredNoonBooks.length}
+                        </span>
+                      </h2>
+                      <p className="text-xs text-slate-500 font-sans">
+                        {t.library.noonBooksSubtitle}
+                      </p>
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
-                {filteredNoonBooks.map((book) => (
-                  <BookCard
-                    key={book.id}
-                    book={book}
-                    onOpen={onOpenBook}
-                  />
-                ))}
-              </div>
-            </section>
-          )}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
+                  {filteredNoonBooks.map((book) => (
+                    <BookCard
+                      key={book.id}
+                      book={book}
+                      onOpen={onOpenBook}
+                    />
+                  ))}
+                </div>
+              </section>
+            )}
 
           {/* SECTION 2: كتبي المحلية (Local User Documents from IndexedDB) */}
-          {(filterType === 'all' || filterType === 'local') && (
+          {localBooksEnabled && (filterType === 'all' || filterType === 'local') && (
             <section aria-labelledby="local-books-heading" className="space-y-4">
               <div className="flex items-center justify-between border-b border-slate-200 pb-3">
                 <div className="flex items-center gap-2">
@@ -271,9 +279,19 @@ export const Library: React.FC<LibraryProps> = ({
         <EmptyState
           title={searchQuery ? t.library.emptyTitle : t.library.empty}
           description={t.library.emptyDesc}
-          actionLabel={searchQuery ? t.common.retry : t.actions.addBook}
+          actionLabel={
+            searchQuery
+              ? t.common.retry
+              : localBooksEnabled
+              ? t.actions.addBook
+              : undefined
+          }
           onAction={
-            searchQuery ? () => setSearchQuery('') : () => onNavigate('add-book')
+            searchQuery
+              ? () => setSearchQuery('')
+              : localBooksEnabled
+              ? () => onNavigate('add-book')
+              : undefined
           }
           icon={searchQuery ? 'search' : 'library'}
         />

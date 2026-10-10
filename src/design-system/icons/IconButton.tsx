@@ -18,6 +18,7 @@ export interface IconButtonProps
   icon?: LucideIcon;
   iconSize?: AppIconSize;
   variant?: IconButtonVariant;
+  active?: boolean;
   label: string; // Required for accessibility (used in aria-label and tooltip title)
   tooltip?: string;
   badgeCount?: number;
@@ -53,6 +54,7 @@ export const IconButton: React.FC<IconButtonProps> = ({
   icon,
   iconSize = 'md',
   variant = 'ghost',
+  active,
   label,
   tooltip,
   badgeCount,
@@ -70,6 +72,7 @@ export const IconButton: React.FC<IconButtonProps> = ({
       type="button"
       title={effectiveTooltip}
       aria-label={label}
+      aria-pressed={typeof active === 'boolean' ? active : undefined}
       disabled={disabled}
       className={`relative inline-flex items-center justify-center min-h-[44px] min-w-[44px] px-2.5 py-2 rounded-xl text-xs font-semibold border transition-all duration-150 select-none active:scale-[0.98] motion-reduce:transform-none disabled:opacity-40 disabled:pointer-events-none disabled:active:scale-100 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-indigo-500 ${VARIANT_STYLES[variant]} ${className}`}
       {...rest}

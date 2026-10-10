@@ -43,7 +43,7 @@ export const LessonQuizModal: React.FC<LessonQuizModalProps> = ({
   const [isAnswerSubmitted, setIsAnswerSubmitted] = useState(false);
   const [result, setResult] = useState<QuizResult | null>(null);
 
-  // Initialize questions when modal opens or initialLesson changes
+  // Initialize questions when modal opens or initialLesson ID changes
   useEffect(() => {
     if (isOpen) {
       const targetLessons = initialLesson
@@ -54,7 +54,7 @@ export const LessonQuizModal: React.FC<LessonQuizModalProps> = ({
       setSelectedLessonIds(targetLessons.map((l) => l.id));
       startQuizWithLessons(targetLessons);
     }
-  }, [isOpen, initialLesson]);
+  }, [isOpen, initialLesson?.id]);
 
   const startQuizWithLessons = (lessonsToTest: BookLesson[]) => {
     const generatedQuestions = lessonQuizService.getQuestionsForLessons(lessonsToTest);

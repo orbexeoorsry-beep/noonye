@@ -23,6 +23,9 @@ const ai = apiKey
     })
   : null;
 
+// Track quota-exhausted models in memory with expiry timestamp
+const exhaustedModels = new Map<string, number>();
+
 async function startServer() {
   const app = express();
   const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
@@ -53,6 +56,7 @@ async function startServer() {
         lessonTitle,
         lessonContext,
         studentLevel = 'المرحلة المتوسطة',
+        targetLanguage = 'ar',
         hintIndex = 1,
         requestSolution = false,
       } = req.body;
@@ -78,6 +82,19 @@ async function startServer() {
           toolInstruction =
             'المطلوب: اشرح الفكرة المحددة خطوة بخطوة في نقاط متسلسلة (١، ٢، ٣) يسهل تتبعها وفهم ترابطها المنطقي.';
           break;
+        case 'translate': {
+          const targetLangLabel =
+            targetLanguage === 'ar' || !targetLanguage ? 'اللغة العربية' : targetLanguage;
+          toolInstruction =
+            `المطلوب: تعرّف تلقائياً على اللغة المكتوب بها النص أو المحتوى الموجود في الجزء المحدد بالمؤشر (سواء من النص المستخرج أو من الصورة المرفقة)، وترجمه بدقة وأمانة علمية إلى ${targetLangLabel}.
+التزم بالتنسيق الواضح التالي:
+### الترجمة إلى ${targetLangLabel}
+(قدّم الترجمة الكاملة والدقيقة والواضحة للمحتوى المحدد بلغة عربية فصحى سلسة تحافظ على المعنى العلمي والتربوي).
+
+### المصطلحات والكلمات المفتاحية
+(استخرج أهم المصطلحات أو المفردات الواردة في التحديد مع مقابلها ومعناها الدقيق في ${targetLangLabel}؛ وإذا كان النص الأصلي باللغة العربية، فاشرح معاني مفرداته ومصطلحاته العلمية بأسلوب معجمي مبسّط للطالب).`;
+          break;
+        }
         case 'hint':
           if (requestSolution) {
             toolInstruction =
@@ -99,33 +116,31 @@ async function startServer() {
         case 'analyze':
         case 'analyzeProblem':
           toolInstruction =
-            `المطلوب: تحليل دقيق وشامل للمسألة الرياضية المحددة في الصفحة بالترتيب الصارم التالي مع ذكر العناوين التالية بالضبط:
+            `المطلوب: تحليل دقيق وشامل للمسألة أو السؤال أو التمرين أو المفهوم العلمي/الرياضي المحدد في الصفحة (أو في الصورة المرفقة وسياق الدرس) بالترتيب الصارم التالي مع ذكر العناوين السبعة التالية بالضبط:
 ### المعطيات
-(استخراج كافة القيم والأرقام والمعلومات المعطاة في المسألة دون اختراع).
+(استخراج كافة القيم والأرقام والمعلومات والحقائق المعطاة في المسألة أو النص المحدد أو الصورة المرفقة).
 
 ### المطلوب
-(تحديد ما تطلبه المسألة بدقة).
+(تحديد ما تطلبه المسألة أو الهدف من السؤال/المعادلة/التمرين بدقة).
 
 ### الفكرة أو القانون المناسب
-(ذكر القاعدة أو القانون الرياضي المناسب للتطبيق مع الحفاظ على الرموز الأصلية).
+(ذكر القاعدة العلمية أو القانون الرياضي أو المبدأ المناسب للتطبيق مع الحفاظ على الرموز الأصلية).
 
 ### تلميح أول
-(توجيه استدلالي ذكي لبدء التفكير دون كشف الحل).
+(توجيه استدلالي ذكي يساعد الطالب على بدء التفكير في الحل خطوة بخطوة).
 
 ### خطوات الحل
-(تفكيك الحل في خطوات رقمية متسلسلة ١، ٢، ٣).
+(تفكيك الحل والتحليل في خطوات رقمية متسلسلة وواضحة ١، ٢، ٣).
 
 ### الحل النهائي
-(القيمة والوحدة والناتج النهائي بدقة).
+(النتيجة النهائية الكاملة والواضحة للمسألة أو السؤال بدقة).
 
 ### درجة الثقة
-(مثلاً: 95% أو 90%).
+(نسبة مئوية مثل: 98% أو 95%).
 
 تنبيهات حاسمة:
-1. حافظ تماماً على رموز المسألة وترتيبها دون أي تغيير.
-2. لا تخترع بيانات أو أرقاماً غير موجودة في الجزء المحدد.
-3. إذا كانت المسألة أو المعادلة غير واضحة تماماً أو مقطوعة، أجب فقط بالنص التالي بالضبط دون أي مقدمة أو خاتمة:
-«لم أتمكن من قراءة المسألة بوضوح. حدد منطقة أكبر وحاول مرة أخرى.»`;
+1. حافظ تماماً على رموز المسألة أو المعادلة وترتيبها دون أي تغيير.
+2. اعتمد على النص المستخرج والصورة المرفقة والنص القريب وسياق الدرس لتقديم تحليل كامل ومفيد دائماً في الأقسام السبعة أعلاه، ولا تترك أي قسم فارغاً.`;
           break;
         case 'explainFigure':
         case 'explainImage':
@@ -160,13 +175,24 @@ async function startServer() {
 7. إذا كانت الصورة غير واضحة بما يكفي أو مقطوعة، أجب فقط بالنص التالي بالضبط دون أي إضافة:
 «الصورة غير واضحة بما يكفي للتحليل. حدد منطقة أوضح وحاول مرة أخرى.»`;
           break;
+        case 'lessonSummary':
+          toolInstruction =
+            `المطلوب: تصرف كمعلم خبير وطالب متفوق يجهز ورقة مراجعة وتلخيص شاملة، غنية، ومنظمة للدرس أو الدروس المحددة.
+خذ حريتك الكاملة في التلخيص بأفضل صورة ممكنة وأظهر جميع المحتوى العلمي المتاح في الدروس المحددة دون اختزال مخل أو حصر الملخص في نقاط قليلة، بحيث يغطي الملخص كافة الأفكار، التعريفات، القوانين، الخطوات، المقارنات، الأمثلة، ونقاط المراجعة وأسئلة المراجعة مع إجاباتها النموذجية.
+أخرج النتيجة حصراً بصيغة JSON صالحة ومطابقة للبنية المطلوبة في النص.`;
+          break;
         default:
           toolInstruction =
             'المطلوب: اشرح هذا الجزء المحدد بعربية فصحى مبسطة ومنظمة.';
       }
 
+      const isLessonSummary = tool === 'lessonSummary';
+
       // Strict instructions: explain only selected part, don't change meaning, don't invent pages/sources, simplified Arabic
-      const systemInstruction = `أنت "مساعد نون" التعليمي الذكي داخل منصة نون للكتب المدرسية.
+      const systemInstruction = isLessonSummary
+        ? `أنت "مساعد نون" التعليمي الذكي داخل منصة نون للكتب المدرسية.
+مهمتك إعداد ملخص دراسي شامل ومتكامل ووافي للدروس المحددة من كتاب "${bookTitle || 'الكتاب المدرسي'}"، يغطي جميع المعلومات والمفاهيم والقوانين والتعريفات والخطوات والأمثلة المتاحة في المحتوى دون اختصار يخل بالمعنى، مع إخراج النتيجة بصيغة JSON صحيحة 100%.`
+        : `أنت "مساعد نون" التعليمي الذكي داخل منصة نون للكتب المدرسية.
 أنت تساعد طالباً في ${studentLevel} يقرأ في الصفحة ${pageNumber || ''} من: "${bookTitle || 'الكتاب المدرسي'}"${lessonTitle ? ` - درس: "${lessonTitle}"` : ''}.
 
 القواعد الصارمة:
@@ -176,15 +202,16 @@ async function startServer() {
 4. استخدم اللغة العربية الفصحى المبسطة الواضحة والسلسة المناسبة لمستوى الطالب (المرحلة المتوسطة).
 5. عند اختيار "تلميح" (hint): اعرض تلميحاً واحداً فقط ولا تعطِ الحل أو الإجابة النهائية إطلاقاً.
 6. ميّز دائماً في الشرح بين «مذكور أو ظاهر في الصفحة» و «استنتاج من العنصر».
-7. إذا كانت الصورة أو الرسم أو الجدول غير واضح بما يكفي، اكتب النص المطلوب فقط: «الصورة غير واضحة بما يكفي للتحليل. حدد منطقة أوضح وحاول مرة أخرى.».
-8. إذا كانت المسألة أو المعادلة غير واضحة، اكتب النص المطلوب فقط: «لم أتمكن من قراءة المسألة بوضوح. حدد منطقة أكبر وحاول مرة أخرى.».`;
+7. عند اختيار "تحليل المسألة" (analyze / analyzeProblem): قدم التحليل دائماً في الأقسام السبعة المطلوبة (المعطيات، المطلوب، الفكرة أو القانون المناسب، تلميح أول، خطوات الحل، الحل النهائي، درجة الثقة) بالاعتماد على النص والصورة وسياق الدرس.`;
 
       const safeText =
         typeof selectedText === 'string' && selectedText.trim().length > 0
           ? selectedText.trim()
           : 'الجزء المحدد في الصورة المرفقة من صفحة الكتاب';
 
-      const userPrompt = `بيانات الجزء المحدد من الصفحة:
+      const userPrompt = isLessonSummary
+        ? `${safeText}\n\n${toolInstruction}`
+        : `بيانات الجزء المحدد من الصفحة:
 - رقم الصفحة: ${pageNumber || 'غير محدد'}
 - نوع العنصر: ${elementType || selectionType || 'عنصر بصري'}
 - عنوان المادة / الكتاب: ${bookTitle || 'كتاب مدرسي'}
@@ -222,8 +249,21 @@ ${toolInstruction}
       }
       contentParts.push({ text: userPrompt });
 
-      // Robust model invocation: try gemini-3.1-flash-lite, fallback to gemini-3.8-flash on error
-      const modelsToTry = ['gemini-3.1-flash-lite', 'gemini-3.8-flash'];
+      // Track models that recently hit 429 quota limits to avoid repeated failed calls
+      const now = Date.now();
+      const candidateModels = [
+        'gemini-3.1-flash-lite-preview',
+        'gemini-flash-latest',
+        'gemini-2.5-flash',
+        'gemini-3-flash-preview',
+      ];
+      const availableModels = candidateModels.filter((m) => {
+        const cooldownUntil = exhaustedModels.get(m);
+        return !cooldownUntil || now >= cooldownUntil;
+      });
+      const modelsToTry =
+        availableModels.length > 0 ? availableModels : candidateModels.slice(0, 2);
+
       let responseText = '';
       let lastErr: unknown = null;
 
@@ -235,6 +275,7 @@ ${toolInstruction}
             config: {
               systemInstruction,
               temperature: 0.3,
+              ...(isLessonSummary ? { responseMimeType: 'application/json' } : {}),
             },
           });
           responseText = response.text?.trim() || '';
@@ -243,12 +284,27 @@ ${toolInstruction}
           }
         } catch (mErr: unknown) {
           lastErr = mErr;
-          console.warn(`Model ${modelName} returned error, attempting fallback:`, (mErr as Error)?.message || mErr);
+          const errStr = mErr instanceof Error ? mErr.message : String(mErr);
+          if (
+            errStr.includes('429') ||
+            errStr.includes('RESOURCE_EXHAUSTED') ||
+            errStr.toLowerCase().includes('quota')
+          ) {
+            // Cooldown this model for 15 minutes so subsequent requests skip it immediately
+            exhaustedModels.set(modelName, Date.now() + 15 * 60 * 1000);
+          }
         }
       }
 
       if (!responseText) {
-        throw lastErr || new Error('تعذر استخراج رد من النموذج');
+        return res.status(200).json({
+          success: false,
+          isGeminiReady: false,
+          isQuotaExceeded: true,
+          message:
+            'خدمة المساعد الذكي غير متصلة حاليًا بسبب تجاوز حد الطلبات المؤقت، سيتم استخدام الشرح التعليمي المحلي.',
+          errorDetail: lastErr instanceof Error ? lastErr.message : String(lastErr || ''),
+        });
       }
 
       return res.status(200).json({
@@ -257,14 +313,12 @@ ${toolInstruction}
         text: responseText,
       });
     } catch (err: unknown) {
-      // Do NOT log student text or content for privacy
       const errorMessage = err instanceof Error ? err.message : String(err);
-      console.error('Gemini explanation request failed:', errorMessage);
 
-      return res.status(500).json({
+      return res.status(200).json({
         success: false,
-        isGeminiReady: true,
-        error: 'حدث خطأ أثناء معالجة الطلب عبر Gemini. يرجى التحقق من الاتصال والمحاولة مرة أخرى.',
+        isGeminiReady: false,
+        message: 'خدمة المساعد الذكي غير متصلة حاليًا، سيتم استخدام الشرح التعليمي المحلي.',
         errorDetail: errorMessage,
       });
     }

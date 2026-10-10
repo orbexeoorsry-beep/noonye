@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { mathAnalysisService } from '../services/mathAnalysisService';
 import { useI18n } from '../../../i18n';
+import { isFeatureEnabled } from '../../../config/feature-flags';
 
 export interface ProblemAnalysisViewProps {
   text: string;
@@ -17,6 +18,10 @@ export interface ProblemAnalysisViewProps {
 
 export const ProblemAnalysisView: React.FC<ProblemAnalysisViewProps> = ({ text }) => {
   const { t } = useI18n();
+
+  if (!isFeatureEnabled('guidedMathEnabled')) {
+    return null;
+  }
 
   if (mathAnalysisService.isUnclearProblem(text)) {
     return (

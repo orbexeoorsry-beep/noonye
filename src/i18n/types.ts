@@ -31,6 +31,7 @@ export interface CommonTranslations {
   english: string;
   localPrivacyNotice: string;
   safeForStudents: string;
+  featureDisabled: string;
 }
 
 export interface LibraryTranslations {
@@ -102,6 +103,11 @@ export interface BookViewerTranslations {
   invalidFileError: string;
   fileTooLargeError: string;
   invalidPageError: string;
+  selectRegionLabel: string;
+  lessonQuizSingle: string;
+  lessonQuizMulti: string;
+  lessonSummarySingle: string;
+  lessonSummaryMulti: string;
 }
 
 export interface LocalDocumentsTranslations {

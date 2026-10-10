@@ -1,6 +1,7 @@
 import React from 'react';
 import { useI18n, supportedLanguages } from '../../i18n';
 import { AppIcon, IconButton } from '../../design-system';
+import { isFeatureEnabled } from '../../config/feature-flags';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -11,10 +12,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
   const { t, lang, setLanguage, isRTL } = useI18n();
 
   const handleSelectLanguage = (newLang: string) => {
+    if (newLang === 'en' && !isFeatureEnabled('englishLanguageEnabled')) return;
     setLanguage(newLang);
   };
 
   if (!isOpen) return null;
+
+  const availableLanguages = Object.values(supportedLanguages).filter(
+    (item) => item.code !== 'en' || isFeatureEnabled('englishLanguageEnabled')
+  );
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200 motion-reduce:animate-none">
@@ -62,7 +68,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
             </p>
 
             <div className="space-y-2">
-              {Object.values(supportedLanguages).map((item) => {
+              {availableLanguages.map((item) => {
                 const isSelected = lang === item.code;
                 return (
                   <button

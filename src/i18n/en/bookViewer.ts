@@ -39,6 +39,12 @@ export const bookViewer: BookViewerTranslations = {
   invalidFileError: 'Selected file is invalid or corrupted.',
   fileTooLargeError: 'File size exceeds 100 MB limit.',
   invalidPageError: 'Invalid page number entered (between 1 and {total}).',
+  selectRegionLabel: 'Select',
+  lessonQuizSingle: 'Lesson Quiz ✅',
+  lessonQuizMulti: 'Quiz ({count} lessons) ✅',
+  lessonSummarySingle: 'Lesson Summary 📝',
+  lessonSummaryMulti: 'Summary ({count} lessons) 📝',
 };
 
 export default bookViewer;
+

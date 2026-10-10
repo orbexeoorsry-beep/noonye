@@ -1,6 +1,7 @@
 export type SupportedAITool =
   | 'explain'
   | 'simplify'
+  | 'translate'
   | 'hint'
   | 'quiz'
   | 'analyzeProblem'
@@ -18,6 +19,7 @@ export interface AIRequest {
   lessonContext?: string;
   studentLevel?: string;
   language?: string;
+  targetLanguage?: string;
   hintIndex?: number;
   requestSolution?: boolean;
 }

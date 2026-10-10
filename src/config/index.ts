@@ -1,3 +1,4 @@
 export * from './appConfig';
-export * from './featureFlags';
+export * from './feature-flags';
 export * from './limits';
+

@@ -433,46 +433,75 @@ export const NoonToolsPanel: React.FC<NoonToolsPanelProps> = ({
 
               {/* 6. Analyze Problem / Equation Tool */}
               {activeTool === 'analyzeProblem' && (
-                <div className="space-y-4 animate-in fade-in duration-200">
-                  {currentElem.mockAiAnalysis.equationAnalysis ? (
-                    <>
-                      <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-2xs">
-                        <h4 className="text-xs font-bold text-slate-700 mb-2">جدول المتغيرات والدلالات:</h4>
-                        <div className="divide-y divide-slate-100 text-xs">
-                          {currentElem.mockAiAnalysis.equationAnalysis.variables.map((v, i) => (
-                            <div key={i} className="py-2 flex items-center justify-between">
-                              <span className="font-mono font-bold text-indigo-700 bg-slate-100 px-2 py-0.5 rounded dir-ltr">
-                                {v.symbol}
-                              </span>
-                              <span className="text-slate-700">{v.meaning}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
+                <div className="space-y-3 animate-in fade-in duration-200">
+                  {/* المعطيات */}
+                  <div className="bg-white border border-slate-200 rounded-2xl p-3.5 shadow-2xs">
+                    <div className="flex items-center gap-2 mb-1.5 text-indigo-700 font-extrabold text-xs">
+                      <Calculator className="w-3.5 h-3.5 text-indigo-600" />
+                      <span>المعطيات والعناصر الأساسية</span>
+                    </div>
+                    <p className="text-xs text-slate-700 leading-relaxed font-medium">
+                      {currentElem.content}
+                    </p>
+                  </div>
 
-                      <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 text-xs">
-                        <span className="font-bold text-slate-800 block mb-1">الاشتقاق والأساس العلمي:</span>
-                        <p className="text-slate-600 leading-relaxed">
-                          {currentElem.mockAiAnalysis.equationAnalysis.derivation}
-                        </p>
+                  {/* جدول المتغيرات إن وجد */}
+                  {currentElem.mockAiAnalysis.equationAnalysis && (
+                    <div className="bg-white border border-slate-200 rounded-2xl p-3.5 shadow-2xs">
+                      <h4 className="text-xs font-extrabold text-slate-800 mb-2">
+                        جدول المتغيرات والدلالات:
+                      </h4>
+                      <div className="divide-y divide-slate-100 text-xs">
+                        {currentElem.mockAiAnalysis.equationAnalysis.variables.map((v, i) => (
+                          <div key={i} className="py-2 flex items-center justify-between gap-2">
+                            <span className="font-mono font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded dir-ltr shrink-0">
+                              {v.symbol}
+                            </span>
+                            <span className="text-slate-700 text-right">{v.meaning}</span>
+                          </div>
+                        ))}
                       </div>
-
-                      <div className="bg-indigo-50/50 border border-indigo-100 rounded-xl p-3.5 text-xs">
-                        <span className="font-bold text-indigo-900 block mb-1">تطبيقات في الحياة الواقعية:</span>
-                        <p className="text-slate-700 leading-relaxed">
-                          {currentElem.mockAiAnalysis.equationAnalysis.application}
-                        </p>
-                      </div>
-                    </>
-                  ) : (
-                    <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200 text-xs sm:text-sm text-slate-700 leading-relaxed">
-                      <span className="font-bold text-slate-900 block mb-2">تحليل المسألة: المعطيات والمطلوب:</span>
-                      <ul className="list-disc list-inside space-y-1.5 text-slate-600">
-                        <li>المعطيات: تم استخراج كافة الأرقام والشروط الواردة في المسألة.</li>
-                        <li>المطلوب: تحديد القانون الحاكم وتطبيقه دون تعقيد.</li>
-                      </ul>
                     </div>
                   )}
+
+                  {/* الفكرة أو القانون المناسب */}
+                  <div className="bg-indigo-50/70 border border-indigo-200/90 rounded-2xl p-3.5 shadow-2xs">
+                    <div className="flex items-center gap-2 mb-1 text-indigo-950 font-extrabold text-xs">
+                      <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+                      <span>الفكرة أو القانون المناسب</span>
+                    </div>
+                    <p className="text-xs text-indigo-950 leading-relaxed font-semibold">
+                      {currentElem.mockAiAnalysis.equationAnalysis?.derivation ||
+                        currentElem.mockAiAnalysis.simplified}
+                    </p>
+                  </div>
+
+                  {/* خطوات التحليل والحل */}
+                  <div className="bg-white border border-slate-200 rounded-2xl p-3.5 shadow-2xs">
+                    <div className="flex items-center gap-2 mb-2 text-slate-900 font-extrabold text-xs">
+                      <ListOrdered className="w-3.5 h-3.5 text-slate-600" />
+                      <span>خطوات الحل والتحليل</span>
+                    </div>
+                    <div className="space-y-1.5">
+                      {currentElem.mockAiAnalysis.stepByStep.map((step, i) => (
+                        <div key={i} className="text-xs text-slate-700 leading-relaxed font-medium">
+                          {step}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* الخلاصة والحل النهائي */}
+                  <div className="bg-emerald-50/90 border border-emerald-200 rounded-2xl p-3.5 shadow-2xs">
+                    <div className="flex items-center gap-2 mb-1 text-emerald-950 font-extrabold text-xs">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                      <span>النتيجة والتطبيق العملي</span>
+                    </div>
+                    <p className="text-xs font-bold text-emerald-900 leading-relaxed">
+                      {currentElem.mockAiAnalysis.equationAnalysis?.application ||
+                        currentElem.mockAiAnalysis.quizQuestion.explanation}
+                    </p>
+                  </div>
                 </div>
               )}
 

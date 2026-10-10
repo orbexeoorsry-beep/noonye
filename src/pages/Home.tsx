@@ -2,6 +2,7 @@ import React from 'react';
 import { useI18n } from '../i18n';
 import { ActivePage, Book } from '../types';
 import { AppIcon } from '../design-system';
+import { isFeatureEnabled } from '../config/feature-flags';
 
 interface HomeProps {
   onNavigate: (page: ActivePage) => void;
@@ -11,6 +12,7 @@ interface HomeProps {
 
 export const Home: React.FC<HomeProps> = ({ onNavigate, onOpenBook, featuredBook }) => {
   const { t, isRTL } = useI18n();
+  const localBooksEnabled = isFeatureEnabled('localBooksEnabled');
   const bookProgress = featuredBook
     ? Math.max(0, Math.min(100, Number.isFinite(featuredBook.progressPercent) ? featuredBook.progressPercent : 0))
     : 0;
@@ -86,7 +88,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate, onOpenBook, featuredBook
                   <AppIcon name={isRTL ? 'arrowLeft' : 'arrowRight'} size="sm" className="text-indigo-600" />
                 </div>
               </button>
-            ) : (
+            ) : localBooksEnabled ? (
               <button
                 type="button"
                 onClick={() => onNavigate('add-book')}
@@ -94,6 +96,15 @@ export const Home: React.FC<HomeProps> = ({ onNavigate, onOpenBook, featuredBook
               >
                 <h2 className="font-display text-lg font-bold text-slate-900">{t.addBook.uploadTitle}</h2>
                 <p className="mt-2 text-sm leading-6 text-slate-500">{t.addBook.uploadSubtitle}</p>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => onNavigate('library')}
+                className="w-full rounded-2xl border border-slate-200 bg-white p-8 text-start transition hover:border-indigo-300 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-indigo-500"
+              >
+                <h2 className="font-display text-lg font-bold text-slate-900">{t.library.pageTitle}</h2>
+                <p className="mt-2 text-sm leading-6 text-slate-500">{t.library.pageSubtitle}</p>
               </button>
             )}
           </div>

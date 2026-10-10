@@ -39,6 +39,12 @@ export const bookViewer: BookViewerTranslations = {
   invalidFileError: 'الملف المختار غير صالح أو تالف.',
   fileTooLargeError: 'حجم الملف يتجاوز الحد الأقصى (100 ميجابايت).',
   invalidPageError: 'رقم الصفحة المدخل غير صالح (بين 1 و {total}).',
+  selectRegionLabel: 'تحديد جزء',
+  lessonQuizSingle: 'اختبار الدرس ✅',
+  lessonQuizMulti: 'اختبار ({count} دروس) ✅',
+  lessonSummarySingle: 'ملخص الدرس 📝',
+  lessonSummaryMulti: 'ملخص ({count} دروس) 📝',
 };
 
 export default bookViewer;
+

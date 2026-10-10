@@ -4,6 +4,7 @@ import { storageService } from './services/storage';
 import { AdminBookStore } from './services/adminBookStore';
 import { localDocumentStore } from './services/localDocumentStore';
 import { INITIAL_ADMIN_BOOKS } from './mock-data/books';
+import { isFeatureEnabled } from './config/feature-flags';
 import { Header } from './components/common/Header';
 import { BottomNav } from './components/common/BottomNav';
 import { Footer } from './components/common/Footer';
@@ -14,19 +15,71 @@ import { BookViewerPage } from './pages/BookViewerPage';
 import { ProgressPage } from './pages/ProgressPage';
 
 export default function App() {
+  const localBooksAllowed = isFeatureEnabled('localBooksEnabled');
   const [activePage, setActivePage] = useState<ActivePage>('home');
-  const [books, setBooks] = useState<Book[]>(() => storageService.getBooks());
+  const [books, setBooks] = useState<Book[]>(() => {
+    const all = storageService.getBooks();
+    return localBooksAllowed ? all : all.filter((b) => b.source === 'admin');
+  });
   const [progress, setProgress] = useState<StudentProgress>(() => storageService.getProgress());
   const [activeBookId, setActiveBookId] = useState<string>(() => {
-    const initial = storageService.getBooks();
+    const initial = storageService
+      .getBooks()
+      .filter((b) => localBooksAllowed || b.source === 'admin');
     return initial.length > 0 ? initial[0].id : INITIAL_ADMIN_BOOKS[0].id;
   });
+
+  // Guard direct URL links (pathname, hash, or search params) for disabled features
+  useEffect(() => {
+    const enforceDirectUrlFeatureFlags = () => {
+      if (typeof window === 'undefined') return;
+      const pathname = window.location.pathname.toLowerCase();
+      const hash = window.location.hash.replace(/^#\/?/, '').toLowerCase();
+      const params = new URLSearchParams(window.location.search);
+      const pageParam = (params.get('page') || params.get('view') || '').toLowerCase();
+      const langParam = (params.get('lang') || '').toLowerCase();
+
+      if (langParam === 'en' && !isFeatureEnabled('englishLanguageEnabled')) {
+        params.delete('lang');
+      }
+
+      const targetsAddBook =
+        pathname.includes('add-book') || hash === 'add-book' || pageParam === 'add-book';
+
+      if (targetsAddBook && !isFeatureEnabled('localBooksEnabled')) {
+        setActivePage('library');
+        window.history.replaceState(null, '', '/');
+        return;
+      }
+
+      if (targetsAddBook && isFeatureEnabled('localBooksEnabled')) {
+        setActivePage('add-book');
+      } else if (pathname.includes('library') || hash === 'library' || pageParam === 'library') {
+        setActivePage('library');
+      } else if (pathname.includes('progress') || hash === 'progress' || pageParam === 'progress') {
+        setActivePage('progress');
+      }
+    };
+
+    enforceDirectUrlFeatureFlags();
+    window.addEventListener('hashchange', enforceDirectUrlFeatureFlags);
+    window.addEventListener('popstate', enforceDirectUrlFeatureFlags);
+    return () => {
+      window.removeEventListener('hashchange', enforceDirectUrlFeatureFlags);
+      window.removeEventListener('popstate', enforceDirectUrlFeatureFlags);
+    };
+  }, []);
 
   // Sync books with AdminBookStore and IndexedDB LocalDocumentStore on startup
   useEffect(() => {
     async function syncBooks() {
       // 1. Curated Admin Books
       const adminBooks = AdminBookStore.getBooks();
+
+      if (!isFeatureEnabled('localBooksEnabled')) {
+        setBooks(adminBooks);
+        return;
+      }
 
       // 2. Synchronize with IndexedDB documents for local user books
       try {
@@ -49,30 +102,54 @@ export default function App() {
   }, []);
 
   const handleNavigate = useCallback((page: ActivePage) => {
+    if (page === 'add-book' && !isFeatureEnabled('localBooksEnabled')) {
+      setActivePage('library');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
     setActivePage(page);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, []);
 
-  const handleOpenBook = useCallback((bookId: string) => {
-    setActiveBookId(bookId);
-    setActivePage('viewer');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  }, []);
+  const handleOpenBook = useCallback(
+    (bookId: string) => {
+      const target = books.find((b) => b.id === bookId);
+      if (target && target.source === 'local' && !isFeatureEnabled('localBooksEnabled')) {
+        return;
+      }
+      setActiveBookId(bookId);
+      setActivePage('viewer');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    },
+    [books]
+  );
 
   const handleOpenBookToPage = useCallback((bookId: string, pageNumber: number) => {
+    const allBooks = storageService.getBooks();
+    const target = allBooks.find((b) => b.id === bookId);
+    if (target && target.source === 'local' && !isFeatureEnabled('localBooksEnabled')) {
+      return;
+    }
     setActiveBookId(bookId);
     storageService.updateBookPage(bookId, pageNumber);
-    setBooks(storageService.getBooks());
+    const nextBooks = storageService.getBooks();
+    setBooks(
+      isFeatureEnabled('localBooksEnabled')
+        ? nextBooks
+        : nextBooks.filter((b) => b.source === 'admin')
+    );
     setActivePage('viewer');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, []);
 
   const handleAddBook = useCallback((newBook: Book) => {
+    if (!isFeatureEnabled('localBooksEnabled')) return;
     const updated = storageService.addBook(newBook);
     setBooks(updated);
   }, []);
 
   const handleDeleteBook = useCallback(async (bookId: string) => {
+    if (!isFeatureEnabled('localBooksEnabled')) return;
     // Admin books can NEVER be deleted
     if (AdminBookStore.isAdminBook(bookId)) {
       return;
@@ -95,6 +172,7 @@ export default function App() {
   }, []);
 
   const handleClearAllLocalBooks = useCallback(async () => {
+    if (!isFeatureEnabled('localBooksEnabled')) return;
     try {
       await localDocumentStore.clearAllDocuments();
     } catch (e) {
@@ -163,17 +241,20 @@ export default function App() {
           />
         )}
 
-        {activePage === 'library' && (
+        {(activePage === 'library' ||
+          (activePage === 'add-book' && !isFeatureEnabled('localBooksEnabled'))) && (
           <Library
             books={books}
             onOpenBook={handleOpenBook}
             onNavigate={handleNavigate}
-            onDeleteBook={handleDeleteBook}
-            onClearAllLocalBooks={handleClearAllLocalBooks}
+            onDeleteBook={isFeatureEnabled('localBooksEnabled') ? handleDeleteBook : undefined}
+            onClearAllLocalBooks={
+              isFeatureEnabled('localBooksEnabled') ? handleClearAllLocalBooks : undefined
+            }
           />
         )}
 
-        {activePage === 'add-book' && (
+        {activePage === 'add-book' && isFeatureEnabled('localBooksEnabled') && (
           <AddBook
             onAddBook={handleAddBook}
             onOpenBook={handleOpenBook}
@@ -185,7 +266,7 @@ export default function App() {
           <BookViewerPage
             book={activeBook}
             onBackToLibrary={() => handleNavigate('library')}
-            onDeleteBook={handleDeleteBook}
+            onDeleteBook={isFeatureEnabled('localBooksEnabled') ? handleDeleteBook : undefined}
             onUpdatePageNumber={handleUpdatePageNumber}
             onQuizCompleted={handleQuizCompleted}
           />
@@ -210,3 +291,4 @@ export default function App() {
     </div>
   );
 }
+
