@@ -11,7 +11,7 @@ export const LOCAL_STORE_CONFIG = {
     BLOBS: 'documents_blobs',
     LEGACY: 'pdf_documents', // For backwards compatibility & migration
   },
-  MAX_FILE_SIZE_BYTES: 50 * 1024 * 1024, // 50MB maximum file size limit
+  MAX_FILE_SIZE_BYTES: 150 * 1024 * 1024, // 150MB maximum file size limit
   ALLOWED_MIME_TYPES: ['application/pdf', 'application/x-pdf'],
   SOURCE_TYPE: 'local-user-book' as const,
 };

@@ -17,6 +17,17 @@
     background-color: #f7f8fc;
     text-rendering: optimizeLegibility;
   }
+
+  canvas {
+    direction: ltr !important;
+    unicode-bidi: isolate !important;
+    text-rendering: geometricPrecision !important;
+    font-kerning: none !important;
+    font-variant-ligatures: none !important;
+    font-feature-settings: "liga" 0, "clig" 0, "calt" 0, "kern" 0 !important;
+    letter-spacing: 0px !important;
+    word-spacing: 0px !important;
+  }
 }
 
 /* Restrained scrollbar for desktop viewers */

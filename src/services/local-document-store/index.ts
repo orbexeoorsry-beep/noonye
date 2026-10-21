@@ -429,37 +429,73 @@ class LocalDocumentStoreService implements LocalDocumentStoreInterface {
    */
   async getLocalBooks(): Promise<import('../../types').LocalBook[]> {
     const docs = await this.getAllDocuments();
-    return docs.map((doc) => ({
-      id: doc.id,
-      source: 'local' as const,
-      title: doc.fileName,
-      subject: doc.subject || 'منهاج دراسي محلي',
-      gradeLevel: 'المرحلة الدراسية',
-      totalPages: doc.pageCount,
-      currentPage: doc.lastPage || 1,
-      progressPercent: Math.min(
-        100,
-        Math.round(((doc.lastPage || 1) / (doc.pageCount || 1)) * 100)
-      ),
-      status: 'local' as const,
-      lastOpened: 'محلي',
-      summary:
-        doc.summary ||
-        `كتاب دراسي محفوظ محلياً على هذا الجهاز (${doc.pageCount} صفحة).`,
-      accentColor: '#4338ca',
-      fileSize: doc.fileSize,
-      sourceType: 'local-user-book' as const,
-      lastOpenedAt: doc.lastOpenedAt,
-      mimeType: doc.mimeType || 'application/pdf',
-      pages: [
-        {
-          pageNumber: 1,
-          chapterTitle: 'المحتوى المحلي',
-          lessonTitle: doc.fileName,
-          elements: [],
-        },
-      ],
-    }));
+    return docs.map((doc) => {
+      const lowerName = (doc.fileName || '').toLowerCase();
+      let inferredSubject = doc.subject || 'منهاج دراسي محلي';
+      let inferredGrade = 'المرحلة الدراسية';
+
+      if (!doc.subject || doc.subject === 'منهاج دراسي محلي') {
+        if (lowerName.includes('math') || lowerName.includes('رياضيات') || lowerName.includes('جبر')) {
+          inferredSubject = 'الرياضيات والجبر';
+        } else if (lowerName.includes('graphic') || lowerName.includes('geo') || lowerName.includes('جغرافيا')) {
+          inferredSubject = 'الجغرافيا والدراسات الاجتماعية';
+        } else if (lowerName.includes('bio') || lowerName.includes('أحياء') || lowerName.includes('احياء')) {
+          inferredSubject = 'الأحياء والعلوم الطبيعية';
+        } else if (lowerName.includes('phys') || lowerName.includes('فيزياء')) {
+          inferredSubject = 'الفيزياء والعلوم التطبيقية';
+        } else if (lowerName.includes('chem') || lowerName.includes('كيمياء')) {
+          inferredSubject = 'الكيمياء والعلوم الجزيئية';
+        } else if (lowerName.includes('hist') || lowerName.includes('تاريخ')) {
+          inferredSubject = 'التاريخ والحضارة';
+        } else if (lowerName.includes('arab') || lowerName.includes('عربي')) {
+          inferredSubject = 'اللغة العربية وآدابها';
+        } else if (lowerName.includes('eng') || lowerName.includes('إنجليزي')) {
+          inferredSubject = 'اللغة الإنجليزية';
+        }
+      }
+
+      if (lowerName.includes('9th') || lowerName.includes('تاسع')) {
+        inferredGrade = 'الصف التاسع الأساسي';
+      } else if (lowerName.includes('10th') || lowerName.includes('عاشر') || lowerName.includes('أول ثانوي')) {
+        inferredGrade = 'الصف الأول الثانوي';
+      } else if (lowerName.includes('11th') || lowerName.includes('ثاني ثانوي')) {
+        inferredGrade = 'الصف الثاني الثانوي';
+      } else if (lowerName.includes('12th') || lowerName.includes('ثالث ثانوي')) {
+        inferredGrade = 'الصف الثالث الثانوي';
+      }
+
+      return {
+        id: doc.id,
+        source: 'local' as const,
+        title: doc.fileName,
+        subject: inferredSubject,
+        gradeLevel: inferredGrade,
+        totalPages: doc.pageCount,
+        currentPage: doc.lastPage || 1,
+        progressPercent: Math.min(
+          100,
+          Math.round(((doc.lastPage || 1) / (doc.pageCount || 1)) * 100)
+        ),
+        status: 'local' as const,
+        lastOpened: 'محلي',
+        summary:
+          doc.summary ||
+          `كتاب ${inferredSubject} (${inferredGrade}) — محفوظ محلياً على هذا الجهاز (${doc.pageCount} صفحة).`,
+        accentColor: '#4338ca',
+        fileSize: doc.fileSize,
+        sourceType: 'local-user-book' as const,
+        lastOpenedAt: doc.lastOpenedAt,
+        mimeType: doc.mimeType || 'application/pdf',
+        pages: [
+          {
+            pageNumber: 1,
+            chapterTitle: inferredSubject,
+            lessonTitle: doc.fileName,
+            elements: [],
+          },
+        ],
+      };
+    });
   }
 
   /**

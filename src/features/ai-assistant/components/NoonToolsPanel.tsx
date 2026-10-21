@@ -36,7 +36,8 @@ export const NoonToolsPanel: React.FC<NoonToolsPanelProps> = ({
   onSelectAnotherElement,
   onQuizCompleted,
 }) => {
-  const { t } = useI18n();
+  const { t, lang, isRTL } = useI18n();
+  const isEnglish = lang === 'en';
   const [activeTool, setActiveTool] = useState<NoonToolType>('simplify');
 
   // Quiz state
@@ -121,7 +122,9 @@ export const NoonToolsPanel: React.FC<NoonToolsPanelProps> = ({
             <span className="font-medium">{t.noonTools.currentlyAnalyzing}:</span>
             {allPageElements.length > 1 && onSelectAnotherElement && (
               <span className="text-[11px] text-indigo-600 font-medium">
-                عناصر أخرى في الصفحة ({allPageElements.length})
+                {isEnglish
+                  ? `Other elements on page (${allPageElements.length})`
+                  : `عناصر أخرى في الصفحة (${allPageElements.length})`}
               </span>
             )}
           </div>
@@ -137,7 +140,7 @@ export const NoonToolsPanel: React.FC<NoonToolsPanelProps> = ({
                 </span>
               </div>
               <span className="text-[10px] font-semibold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded shrink-0">
-                {currentElem.badge || 'عنصر'}
+                {currentElem.badge || (isEnglish ? 'Element' : 'عنصر')}
               </span>
             </div>
           ) : (
@@ -197,7 +200,7 @@ export const NoonToolsPanel: React.FC<NoonToolsPanelProps> = ({
         </div>
 
         {/* Tool Output & Analysis Content Deck */}
-        <div className="flex-1 overflow-y-auto p-5 text-right space-y-4">
+        <div className="flex-1 overflow-y-auto p-5 text-start space-y-4">
           {!currentElem ? (
             <div className="text-center py-16 text-slate-400 text-sm">
               <Sparkles className="w-8 h-8 mx-auto mb-2 text-slate-300" />
@@ -211,7 +214,9 @@ export const NoonToolsPanel: React.FC<NoonToolsPanelProps> = ({
                   <div className="bg-indigo-50/50 border border-indigo-100 rounded-2xl p-4">
                     <div className="flex items-center gap-1.5 text-xs font-bold text-indigo-800 mb-2">
                       <BookOpen className="w-4 h-4 text-indigo-600" />
-                      <span>الصياغة المبسطة باللغة اليومية</span>
+                      <span>
+                        {isEnglish ? 'Simplified Everyday Explanation' : 'الصياغة المبسطة باللغة اليومية'}
+                      </span>
                     </div>
                     <p className="text-sm sm:text-base text-slate-800 leading-relaxed">
                       {currentElem.mockAiAnalysis.simplified}
@@ -219,10 +224,20 @@ export const NoonToolsPanel: React.FC<NoonToolsPanelProps> = ({
                   </div>
 
                   <div className="bg-slate-50 rounded-xl p-3 border border-slate-200 text-xs text-slate-600 leading-relaxed">
-                    <span className="font-bold text-slate-800 block mb-1">المصطلحات المفتاحية في هذه الفقرة:</span>
+                    <span className="font-bold text-slate-800 block mb-1">
+                      {isEnglish ? 'Key Takeaways in This Section:' : 'المصطلحات المفتاحية في هذه الفقرة:'}
+                    </span>
                     <ul className="list-disc list-inside space-y-1">
-                      <li>تعتمد الفكرة الأساسية على الموازنة وحفظ الطاقة.</li>
-                      <li>يمكنك ربط هذا المفهوم بالتجارب الحياتية اليومية لتثبيت الحفظ.</li>
+                      <li>
+                        {isEnglish
+                          ? 'Focuses on the core principle and relationship between variables.'
+                          : 'تعتمد الفكرة الأساسية على الموازنة وحفظ الطاقة.'}
+                      </li>
+                      <li>
+                        {isEnglish
+                          ? 'Connect this concept to real-world examples for better retention.'
+                          : 'يمكنك ربط هذا المفهوم بالتجارب الحياتية اليومية لتثبيت الحفظ.'}
+                      </li>
                     </ul>
                   </div>
                 </div>
@@ -232,7 +247,7 @@ export const NoonToolsPanel: React.FC<NoonToolsPanelProps> = ({
               {activeTool === 'stepByStep' && (
                 <div className="space-y-3 animate-in fade-in duration-200">
                   <span className="text-xs font-bold text-slate-700 block mb-1">
-                    الشرح المفصل خطوة بخطوة:
+                    {isEnglish ? 'Detailed Step-by-Step Breakdown:' : 'الشرح المفصل خطوة بخطوة:'}
                   </span>
                   {currentElem.mockAiAnalysis.stepByStep.map((step, idx) => (
                     <div
@@ -244,10 +259,10 @@ export const NoonToolsPanel: React.FC<NoonToolsPanelProps> = ({
                           {idx + 1}
                         </span>
                         <span className="text-xs font-bold text-slate-800">
-                          المرحلة {idx + 1}
+                          {isEnglish ? `Step ${idx + 1}` : `المرحلة ${idx + 1}`}
                         </span>
                       </div>
-                      <p className="text-xs sm:text-sm text-slate-700 leading-relaxed pr-7">
+                      <p className={`text-xs sm:text-sm text-slate-700 leading-relaxed ${isRTL ? 'pr-7' : 'pl-7'}`}>
                         {step.replace(/^\d+\.\s*/, '')}
                       </p>
                     </div>
@@ -261,7 +276,7 @@ export const NoonToolsPanel: React.FC<NoonToolsPanelProps> = ({
                   <div className="bg-amber-50/70 border border-amber-200 rounded-2xl p-5">
                     <div className="flex items-center gap-2 text-amber-800 font-bold text-sm mb-2">
                       <Lightbulb className="w-5 h-5 text-amber-600" />
-                      <span>تلميح ذكي للوصول للحل</span>
+                      <span>{isEnglish ? 'Smart Guided Hint' : 'تلميح ذكي للوصول للحل'}</span>
                     </div>
                     <p className="text-sm sm:text-base text-slate-800 leading-relaxed">
                       {currentElem.mockAiAnalysis.hint}
@@ -269,7 +284,11 @@ export const NoonToolsPanel: React.FC<NoonToolsPanelProps> = ({
                   </div>
 
                   <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-500 leading-relaxed">
-                    <span>💡 نصيحة نون: حاول إعادة قراءة المسألة والتلميح معاً قبل الاطلاع على الإجابة النهائية لتنشيط التفكير النقدي.</span>
+                    <span>
+                      {isEnglish
+                        ? '💡 Noon Tip: Re-read the problem together with this hint before checking the final answer to strengthen critical thinking.'
+                        : '💡 نصيحة نون: حاول إعادة قراءة المسألة والتلميح معاً قبل الاطلاع على الإجابة النهائية لتنشيط التفكير النقدي.'}
+                    </span>
                   </div>
                 </div>
               )}
@@ -281,9 +300,11 @@ export const NoonToolsPanel: React.FC<NoonToolsPanelProps> = ({
                     <div className="flex items-center justify-between mb-3 text-xs text-slate-500">
                       <span className="font-bold text-indigo-700 flex items-center gap-1">
                         <CheckSquare className="w-4 h-4" />
-                        <span>اختبار استيعاب سريع</span>
+                        <span>{isEnglish ? 'Quick Comprehension Check' : 'اختبار استيعاب سريع'}</span>
                       </span>
-                      <span className="text-[11px] bg-slate-100 px-2 py-0.5 rounded font-mono">سؤال تفاعلي</span>
+                      <span className="text-[11px] bg-slate-100 px-2 py-0.5 rounded font-mono">
+                        {isEnglish ? 'Interactive Quiz' : 'سؤال تفاعلي'}
+                      </span>
                     </div>
 
                     <h4 className="text-sm sm:text-base font-bold text-slate-900 mb-4 leading-relaxed">
@@ -315,7 +336,7 @@ export const NoonToolsPanel: React.FC<NoonToolsPanelProps> = ({
                             key={idx}
                             onClick={() => handleOptionSelect(idx)}
                             disabled={isAnswerSubmitted}
-                            className={`w-full text-right p-3 rounded-xl border text-xs sm:text-sm transition-all flex items-center justify-between gap-2 min-h-[44px] ${optionStyle}`}
+                            className={`w-full text-start p-3 rounded-xl border text-xs sm:text-sm transition-all flex items-center justify-between gap-2 min-h-[44px] ${optionStyle}`}
                           >
                             <span>{opt}</span>
                             {isAnswerSubmitted && isCorrectOption && (
@@ -345,7 +366,7 @@ export const NoonToolsPanel: React.FC<NoonToolsPanelProps> = ({
                           className="min-h-[42px] px-4 py-2 rounded-xl text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 flex items-center gap-1.5 transition-colors mr-auto"
                         >
                           <RotateCcw className="w-3.5 h-3.5" />
-                          <span>إعادة السؤال</span>
+                          <span>{isEnglish ? 'Try Again' : 'إعادة السؤال'}</span>
                         </button>
                       )}
                     </div>
@@ -379,10 +400,10 @@ export const NoonToolsPanel: React.FC<NoonToolsPanelProps> = ({
                     <div className="flex items-center justify-between text-xs text-slate-400 mb-4">
                       <span className="flex items-center gap-1.5 font-medium">
                         <Volume2 className="w-4 h-4 text-indigo-400" />
-                        <span>القراءة الصوتية التفاعلية</span>
+                        <span>{isEnglish ? 'Interactive Audio Reader' : 'القراءة الصوتية التفاعلية'}</span>
                       </span>
                       <span className="font-mono text-[11px] bg-slate-800 px-2 py-0.5 rounded text-indigo-300">
-                        صوت عربي واضح
+                        {isEnglish ? 'Clear Voice' : 'صوت عربي واضح'}
                       </span>
                     </div>
 
@@ -399,7 +420,7 @@ export const NoonToolsPanel: React.FC<NoonToolsPanelProps> = ({
                         <button
                           onClick={() => setIsPlayingAudio(!isPlayingAudio)}
                           className="w-11 h-11 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white flex items-center justify-center transition-transform active:scale-95 shadow-md"
-                          aria-label={isPlayingAudio ? 'إيقاف' : 'تشغيل'}
+                          aria-label={isPlayingAudio ? (isEnglish ? 'Pause' : 'إيقاف') : (isEnglish ? 'Play' : 'تشغيل')}
                         >
                           {isPlayingAudio ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5 ml-0.5" />}
                         </button>
@@ -426,7 +447,9 @@ export const NoonToolsPanel: React.FC<NoonToolsPanelProps> = ({
                   </div>
 
                   <p className="text-xs text-slate-500 leading-relaxed px-1">
-                    القراءة الصوتية تساعد في تعزيز التركيز البصري والسمعي في آن واحد، ومفيدة جداً لمراجعة النصوص العلمية والمصطلحات.
+                    {isEnglish
+                      ? 'Audio reading reinforces both visual and auditory focus simultaneously, ideal for reviewing scientific terms.'
+                      : 'القراءة الصوتية تساعد في تعزيز التركيز البصري والسمعي في آن واحد، ومفيدة جداً لمراجعة النصوص العلمية والمصطلحات.'}
                   </p>
                 </div>
               )}
@@ -434,22 +457,22 @@ export const NoonToolsPanel: React.FC<NoonToolsPanelProps> = ({
               {/* 6. Analyze Problem / Equation Tool */}
               {activeTool === 'analyzeProblem' && (
                 <div className="space-y-3 animate-in fade-in duration-200">
-                  {/* المعطيات */}
+                  {/* المعطيات / Given */}
                   <div className="bg-white border border-slate-200 rounded-2xl p-3.5 shadow-2xs">
                     <div className="flex items-center gap-2 mb-1.5 text-indigo-700 font-extrabold text-xs">
                       <Calculator className="w-3.5 h-3.5 text-indigo-600" />
-                      <span>المعطيات والعناصر الأساسية</span>
+                      <span>{isEnglish ? 'Given & Core Elements' : 'المعطيات والعناصر الأساسية'}</span>
                     </div>
                     <p className="text-xs text-slate-700 leading-relaxed font-medium">
                       {currentElem.content}
                     </p>
                   </div>
 
-                  {/* جدول المتغيرات إن وجد */}
+                  {/* جدول المتغيرات إن وجد / Variables Table */}
                   {currentElem.mockAiAnalysis.equationAnalysis && (
                     <div className="bg-white border border-slate-200 rounded-2xl p-3.5 shadow-2xs">
                       <h4 className="text-xs font-extrabold text-slate-800 mb-2">
-                        جدول المتغيرات والدلالات:
+                        {isEnglish ? 'Variables & Meanings:' : 'جدول المتغيرات والدلالات:'}
                       </h4>
                       <div className="divide-y divide-slate-100 text-xs">
                         {currentElem.mockAiAnalysis.equationAnalysis.variables.map((v, i) => (
@@ -457,18 +480,18 @@ export const NoonToolsPanel: React.FC<NoonToolsPanelProps> = ({
                             <span className="font-mono font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded dir-ltr shrink-0">
                               {v.symbol}
                             </span>
-                            <span className="text-slate-700 text-right">{v.meaning}</span>
+                            <span className="text-slate-700 text-end">{v.meaning}</span>
                           </div>
                         ))}
                       </div>
                     </div>
                   )}
 
-                  {/* الفكرة أو القانون المناسب */}
+                  {/* الفكرة أو القانون المناسب / Concept or Formula */}
                   <div className="bg-indigo-50/70 border border-indigo-200/90 rounded-2xl p-3.5 shadow-2xs">
                     <div className="flex items-center gap-2 mb-1 text-indigo-950 font-extrabold text-xs">
                       <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
-                      <span>الفكرة أو القانون المناسب</span>
+                      <span>{isEnglish ? 'Concept or Formula' : 'الفكرة أو القانون المناسب'}</span>
                     </div>
                     <p className="text-xs text-indigo-950 leading-relaxed font-semibold">
                       {currentElem.mockAiAnalysis.equationAnalysis?.derivation ||
@@ -476,11 +499,11 @@ export const NoonToolsPanel: React.FC<NoonToolsPanelProps> = ({
                     </p>
                   </div>
 
-                  {/* خطوات التحليل والحل */}
+                  {/* خطوات التحليل والحل / Solution Steps */}
                   <div className="bg-white border border-slate-200 rounded-2xl p-3.5 shadow-2xs">
                     <div className="flex items-center gap-2 mb-2 text-slate-900 font-extrabold text-xs">
                       <ListOrdered className="w-3.5 h-3.5 text-slate-600" />
-                      <span>خطوات الحل والتحليل</span>
+                      <span>{isEnglish ? 'Solution & Analysis Steps' : 'خطوات الحل والتحليل'}</span>
                     </div>
                     <div className="space-y-1.5">
                       {currentElem.mockAiAnalysis.stepByStep.map((step, i) => (
@@ -491,11 +514,11 @@ export const NoonToolsPanel: React.FC<NoonToolsPanelProps> = ({
                     </div>
                   </div>
 
-                  {/* الخلاصة والحل النهائي */}
+                  {/* الخلاصة والحل النهائي / Final Solution */}
                   <div className="bg-emerald-50/90 border border-emerald-200 rounded-2xl p-3.5 shadow-2xs">
                     <div className="flex items-center gap-2 mb-1 text-emerald-950 font-extrabold text-xs">
                       <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                      <span>النتيجة والتطبيق العملي</span>
+                      <span>{isEnglish ? 'Final Result & Practical Application' : 'النتيجة والتطبيق العملي'}</span>
                     </div>
                     <p className="text-xs font-bold text-emerald-900 leading-relaxed">
                       {currentElem.mockAiAnalysis.equationAnalysis?.application ||
@@ -511,7 +534,7 @@ export const NoonToolsPanel: React.FC<NoonToolsPanelProps> = ({
                   <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-2xs">
                     <div className="flex items-center gap-1.5 text-xs font-bold text-indigo-800 mb-2">
                       <ImageIcon className="w-4 h-4 text-indigo-600" />
-                      <span>تفسير عناصر الشكل التوضيحي</span>
+                      <span>{isEnglish ? 'Figure & Diagram Breakdown' : 'تفسير عناصر الشكل التوضيحي'}</span>
                     </div>
                     <p className="text-xs sm:text-sm text-slate-800 leading-relaxed mb-3">
                       {currentElem.mockAiAnalysis.figureExplanation || currentElem.mockAiAnalysis.simplified}
@@ -519,14 +542,24 @@ export const NoonToolsPanel: React.FC<NoonToolsPanelProps> = ({
                   </div>
 
                   <div className="bg-slate-50 rounded-xl p-3.5 border border-slate-200 text-xs text-slate-600 space-y-2">
-                    <span className="font-bold text-slate-800 block">نقاط رئيسية يجب الانتباه لها في الرسم:</span>
+                    <span className="font-bold text-slate-800 block">
+                      {isEnglish ? 'Key Points to Notice in the Figure:' : 'نقاط رئيسية يجب الانتباه لها في الرسم:'}
+                    </span>
                     <div className="flex items-start gap-2">
                       <span className="w-1.5 h-1.5 rounded-full bg-indigo-600 mt-1.5 shrink-0" />
-                      <span>تطابق البيانات والأسهم التوضيحية مع الشرح النظري في متن الصفحة.</span>
+                      <span>
+                        {isEnglish
+                          ? 'Alignment of labels and directional arrows with the theoretical explanation on the page.'
+                          : 'تطابق البيانات والأسهم التوضيحية مع الشرح النظري في متن الصفحة.'}
+                      </span>
                     </div>
                     <div className="flex items-start gap-2">
                       <span className="w-1.5 h-1.5 rounded-full bg-indigo-600 mt-1.5 shrink-0" />
-                      <span>علاقة المحاور الإحداثية والاتجاهات الفيزيائية أو الجغرافية.</span>
+                      <span>
+                        {isEnglish
+                          ? 'Relationship between coordinate axes and physical or geographical directions.'
+                          : 'علاقة المحاور الإحداثية والاتجاهات الفيزيائية أو الجغرافية.'}
+                      </span>
                     </div>
                   </div>
                 </div>

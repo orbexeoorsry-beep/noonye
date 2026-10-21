@@ -7,6 +7,7 @@ import {
   SelectionActionType,
 } from '../selection';
 import { InteractiveElement } from '../../types';
+import { useI18n } from '../../i18n';
 
 interface PdfPageViewProps {
   doc: pdfjsLib.PDFDocumentProxy;
@@ -35,6 +36,7 @@ export const PdfPageView: React.FC<PdfPageViewProps> = ({
   onPageIntersect,
   setCanvasRef,
 }) => {
+  const { isRTL } = useI18n();
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isRendered, setIsRendered] = useState(false);
@@ -126,7 +128,7 @@ export const PdfPageView: React.FC<PdfPageViewProps> = ({
       {/* Page Header / Number Badge */}
       <div className="w-full flex items-center justify-between px-3 py-1 mb-1 text-[11px] text-slate-400 font-mono select-none">
         <span className="bg-slate-200/70 text-slate-600 px-2 py-0.5 rounded-md font-semibold">
-          صفحة {pageNumber}
+          {isRTL ? `صفحة ${pageNumber}` : `Page ${pageNumber}`}
         </span>
       </div>
 
@@ -145,13 +147,17 @@ export const PdfPageView: React.FC<PdfPageViewProps> = ({
         {!isRendered && (
           <div className="absolute inset-0 bg-slate-50 flex items-center justify-center animate-pulse">
             <span className="text-xs text-slate-400 font-medium">
-              جارٍ تحميل صفحة {pageNumber}...
+              {isRTL ? `جارٍ تحميل صفحة ${pageNumber}...` : `Loading page ${pageNumber}...`}
             </span>
           </div>
         )}
 
-        {/* HTML5 Canvas */}
-        <canvas ref={canvasRef} className="block w-full h-full" />
+        {/* HTML5 Canvas — strictly LTR so PDF user-space glyph coordinates never get BiDi-reordered */}
+        <canvas
+          ref={canvasRef}
+          dir="ltr"
+          className="block w-full h-full [direction:ltr] [unicode-bidi:isolate]"
+        />
 
         {/* Smart Interaction Overlay Layer (Disabled while Region Selection Tool is active) */}
         {isRendered && (
@@ -168,3 +174,4 @@ export const PdfPageView: React.FC<PdfPageViewProps> = ({
     </div>
   );
 };
+

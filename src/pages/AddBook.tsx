@@ -69,6 +69,12 @@ export const AddBook: React.FC<AddBookProps> = ({
 
       const bookId = 'book_' + Date.now();
       const cleanTitle = fileName.replace(/\.pdf$/i, '');
+      const detectedProfile = await pdfService.analyzeBookProfile(pdfDoc, cleanTitle);
+      const finalSubject = customSubject || detectedProfile.detectedSubject || 'منهاج دراسي محلي';
+      const finalGrade = detectedProfile.detectedGrade || 'المرحلة الدراسية';
+      const finalSummary =
+        detectedProfile.detectedSummary ||
+        `كتاب دراسي محفوظ محلياً على هذا الجهاز (${pageCount} صفحة).`;
 
       // 3. Store in IndexedDB with separated metadata & Blob
       const savedMetadata = await localDocumentStore.saveDocument({
@@ -80,8 +86,8 @@ export const AddBook: React.FC<AddBookProps> = ({
         pageCount: pageCount,
         lastPage: 1,
         processingStatus: 'ready',
-        subject: customSubject || 'منهاج دراسي محلي',
-        summary: `كتاب دراسي محفوظ محلياً على هذا الجهاز (${pageCount} صفحة).`,
+        subject: finalSubject,
+        summary: finalSummary,
       });
 
       // 4. Create metadata object for Library UI
@@ -89,14 +95,14 @@ export const AddBook: React.FC<AddBookProps> = ({
         id: savedMetadata.id,
         source: 'local',
         title: savedMetadata.fileName,
-        subject: savedMetadata.subject || 'منهاج دراسي محلي',
-        gradeLevel: 'المرحلة الدراسية',
+        subject: savedMetadata.subject || finalSubject,
+        gradeLevel: finalGrade,
         totalPages: savedMetadata.pageCount,
         currentPage: 1,
-        progressPercent: Math.round((1 / savedMetadata.pageCount) * 100),
+        progressPercent: Math.round((1 / Math.max(1, savedMetadata.pageCount)) * 100),
         status: 'local',
         lastOpened: 'محلي',
-        summary: `كتاب دراسي محفوظ محلياً على هذا الجهاز (${savedMetadata.pageCount} صفحة).`,
+        summary: finalSummary,
         accentColor: '#4338ca',
         fileSize: savedMetadata.fileSize,
         sourceType: 'local-user-book',
@@ -105,8 +111,8 @@ export const AddBook: React.FC<AddBookProps> = ({
         pages: [
           {
             pageNumber: 1,
-            chapterTitle: 'الفصل الأول',
-            lessonTitle: 'الصفحة الأولى من ملف PDF',
+            chapterTitle: finalSubject,
+            lessonTitle: cleanTitle,
             elements: [],
           },
         ],

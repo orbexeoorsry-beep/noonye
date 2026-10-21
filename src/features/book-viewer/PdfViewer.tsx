@@ -243,10 +243,18 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
           const canvas = canvasMapRef.current.get(slice.pageNumber);
           if (!canvas) continue;
 
-          const x = Math.max(0, (slice.xPct / 100) * canvas.width);
-          const y = Math.max(0, (slice.yPct / 100) * canvas.height);
-          const w = Math.min(canvas.width - x, (slice.widthPct / 100) * canvas.width);
-          const h = Math.min(canvas.height - y, (slice.heightPct / 100) * canvas.height);
+          // Add a 1.5% margin around the selection so edge Arabic glyphs/math symbols are never clipped
+          const padX = Math.round(canvas.width * 0.015);
+          const padY = Math.round(canvas.height * 0.015);
+          const rawX = (slice.xPct / 100) * canvas.width;
+          const rawY = (slice.yPct / 100) * canvas.height;
+          const rawW = (slice.widthPct / 100) * canvas.width;
+          const rawH = (slice.heightPct / 100) * canvas.height;
+
+          const x = Math.max(0, rawX - padX);
+          const y = Math.max(0, rawY - padY);
+          const w = Math.min(canvas.width - x, rawW + padX * 2);
+          const h = Math.min(canvas.height - y, rawH + padY * 2);
 
           if (w >= 8 && h >= 8) {
             validParts.push({ canvas, x, y, w, h });
@@ -258,7 +266,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
         const totalRawWidth = Math.max(...validParts.map((p) => p.w));
         const totalRawHeight = validParts.reduce((acc, p) => acc + p.h, 0);
 
-        const maxDim = 1200;
+        const maxDim = 1500;
         const scaleFactor = Math.min(1, maxDim / Math.max(totalRawWidth, totalRawHeight));
 
         const cropCanvas = document.createElement('canvas');
@@ -279,7 +287,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
           currentDestY += destH;
         }
 
-        return cropCanvas.toDataURL('image/jpeg', 0.82);
+        return cropCanvas.toDataURL('image/jpeg', 0.9);
       } catch {
         return '';
       }
@@ -297,7 +305,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
 
     const currentBook = bookRef.current;
     try {
-      let data: ArrayBuffer | Uint8Array | null = null;
+      let data: ArrayBuffer | Uint8Array | string | null = null;
 
       if (currentBook.source === 'local') {
         data = await localDocumentStore.getDocumentData(currentBook.id);
@@ -305,16 +313,18 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
           const generated = generateEducationalSamplePdf();
           data = generated.buffer as ArrayBuffer;
         }
+      } else if ('pdfUrl' in currentBook && currentBook.pdfUrl) {
+        data = currentBook.pdfUrl;
       } else {
         const generated = generateEducationalSamplePdf();
         data = generated.buffer as ArrayBuffer;
       }
 
-      if (!data || data.byteLength === 0) {
+      if (!data || (typeof data !== 'string' && data.byteLength === 0)) {
         throw new Error(t.viewer.invalidFileError);
       }
 
-      if (data.byteLength > 150 * 1024 * 1024) {
+      if (typeof data !== 'string' && data.byteLength > 150 * 1024 * 1024) {
         throw new Error(t.viewer.fileTooLargeError);
       }
 
@@ -327,7 +337,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
       setCurrentPage(initialPage);
       setActiveSelectionPage(initialPage);
 
-      // Extract Book Lessons (from curriculum database, outline, or table of contents)
+      // Extract Book Lessons (from curriculum database, outline, table of contents, or dynamic page scanning)
       const extractedLessons = await bookLessonsService.extractLessonsFromBook(currentBook, doc);
       setLessons(extractedLessons);
       const initialLesson = bookLessonsService.findLessonForPage(extractedLessons, initialPage);
@@ -370,11 +380,6 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
       if (prevSelectionKeyRef.current === selKey) return;
       prevSelectionKeyRef.current = selKey;
 
-      const cropBase64 = getSelectedCropBase64(selection, activeSelectionPage);
-      if (cropBase64) {
-        setSelectedImage((prev) => (prev !== cropBase64 ? cropBase64 : prev));
-      }
-
       const slices =
         selection.pageSlices && selection.pageSlices.length > 0
           ? selection.pageSlices
@@ -387,6 +392,20 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
                 heightPct: selection.heightPct,
               },
             ];
+
+      const cropBase64 = getSelectedCropBase64(selection, activeSelectionPage);
+      if (cropBase64) {
+        setSelectedImage((prev) => (prev !== cropBase64 ? cropBase64 : prev));
+      } else if (slices.length > 0) {
+        // Offscreen fallback if page canvas is not yet mounted in DOM
+        pdfService
+          .renderPageToDataUrl(pdfDoc, slices[0].pageNumber, slices[0], 1400)
+          .then((fallbackUrl) => {
+            if (!isCancelled && fallbackUrl) {
+              setSelectedImage((prev) => (prev !== fallbackUrl ? fallbackUrl : prev));
+            }
+          });
+      }
 
       Promise.all([
         Promise.all(
@@ -521,45 +540,61 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
       const crop = getSelectedCropBase64(selection, pageNum);
       if (crop) {
         setSelectedImage(crop);
+      } else if (pdfDoc) {
+        pdfService
+          .renderPageToDataUrl(pdfDoc, pageNum, selection, 1400)
+          .then((url) => {
+            if (url) setSelectedImage(url);
+          });
       }
     }
-    if (selection && pdfDoc) {
-      const slices =
-        selection.pageSlices && selection.pageSlices.length > 0
-          ? selection.pageSlices
-          : [
-              {
-                pageNumber: selection.pageNumber || pageNum,
-                xPct: selection.xPct,
-                yPct: selection.yPct,
-                widthPct: selection.widthPct,
-                heightPct: selection.heightPct,
-              },
-            ];
-      const [texts, surroundingList] = await Promise.all([
-        Promise.all(slices.map((s) => pdfService.extractTextFromRegion(pdfDoc, s.pageNumber, s))),
-        Promise.all(
-          slices.map((s) => {
-            const nearbyRegion = {
-              xPct: Math.max(0, s.xPct - 12),
-              yPct: Math.max(0, s.yPct - 10),
-              widthPct: Math.min(100 - Math.max(0, s.xPct - 12), s.widthPct + 24),
-              heightPct: Math.min(100 - Math.max(0, s.yPct - 10), s.heightPct + 20),
-            };
-            return pdfService.extractTextFromRegion(pdfDoc, s.pageNumber, nearbyRegion);
-          })
-        ),
-      ]);
-      const joined = texts.map((t) => t.trim()).filter(Boolean).join('\n\n');
-      setSelectedText(joined);
 
-      const joinedNearby = surroundingList.map((t) => t.trim()).filter(Boolean).join('\n\n');
-      setNearbyText(joinedNearby);
-    }
-
+    // Open panel and activate tool immediately for instant UI responsiveness
     setActiveSelectionTool(toolId);
     setIsSelectionPanelOpen(true);
     setSelectionActionNonce((n) => n + 1);
+
+    if (selection && pdfDoc) {
+      try {
+        const slices =
+          selection.pageSlices && selection.pageSlices.length > 0
+            ? selection.pageSlices
+            : [
+                {
+                  pageNumber: selection.pageNumber || pageNum,
+                  xPct: selection.xPct,
+                  yPct: selection.yPct,
+                  widthPct: selection.widthPct,
+                  heightPct: selection.heightPct,
+                },
+              ];
+        const [texts, surroundingList] = await Promise.all([
+          Promise.all(slices.map((s) => pdfService.extractTextFromRegion(pdfDoc, s.pageNumber, s))),
+          Promise.all(
+            slices.map((s) => {
+              const nearbyRegion = {
+                xPct: Math.max(0, s.xPct - 12),
+                yPct: Math.max(0, s.yPct - 10),
+                widthPct: Math.min(100 - Math.max(0, s.xPct - 12), s.widthPct + 24),
+                heightPct: Math.min(100 - Math.max(0, s.yPct - 10), s.heightPct + 20),
+              };
+              return pdfService.extractTextFromRegion(pdfDoc, s.pageNumber, nearbyRegion);
+            })
+          ),
+        ]);
+        const joined = texts.map((t) => t.trim()).filter(Boolean).join('\n\n');
+        if (joined) {
+          setSelectedText((prev) => (prev !== joined ? joined : prev));
+        }
+
+        const joinedNearby = surroundingList.map((t) => t.trim()).filter(Boolean).join('\n\n');
+        if (joinedNearby) {
+          setNearbyText((prev) => (prev !== joinedNearby ? joinedNearby : prev));
+        }
+      } catch {
+        // Ignore extraction errors and rely on image crop + lesson context
+      }
+    }
   }, [selection, pdfDoc, getSelectedCropBase64]);
 
   const handlePageIntersect = useCallback((pNum: number) => {
@@ -593,15 +628,29 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
 
   const handleOpenNoonTools = () => {
     if (!selection) {
-      if (!isSelectionModeEnabled) {
-        setIsSelectionModeEnabled(true);
+      const autoSelection: SelectionRegion = {
+        xPct: 4,
+        yPct: 6,
+        widthPct: 92,
+        heightPct: 88,
+        pageNumber: currentPage,
+        endPageNumber: currentPage,
+      };
+      setIsSelectionModeEnabled(true);
+      setActiveSelectionPage(currentPage);
+      setSelection(autoSelection);
+      const crop = getSelectedCropBase64(autoSelection, currentPage);
+      if (crop) {
+        setSelectedImage(crop);
+      } else if (pdfDoc) {
+        pdfService
+          .renderPageToDataUrl(pdfDoc, currentPage, autoSelection, 1400)
+          .then((url) => {
+            if (url) setSelectedImage(url);
+          });
       }
-      showToastMessage(
-        isRTL
-          ? 'تم تفعيل أداة التحديد — اسحب بالمؤشر لتحديد فقرة أو مسألة أولًا.'
-          : 'Selection tool enabled — please drag to select a region first.',
-        3000
-      );
+      setIsSelectionPanelOpen(true);
+      setSelectionActionNonce((n) => n + 1);
       return;
     }
     setIsSelectionPanelOpen(true);
@@ -953,7 +1002,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
           ) : (
             /* Continuous Vertical List of Book Pages + Cross-Page Selection Layer */
             pdfDoc && (
-              <div className="relative flex flex-col items-center w-full max-w-full pb-16">
+              <div className="relative flex flex-col items-center w-fit max-w-full mx-auto pb-16">
                 {pageList.map((pageNum) => (
                   <PdfPageView
                     key={pageNum}

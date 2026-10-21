@@ -91,7 +91,8 @@ export const LessonSummaryModal: React.FC<LessonSummaryModalProps> = ({
     const currentLessons = selectedLessonsRef.current;
     if (currentLessons.length === 0) return;
 
-    const reqKey = `${bookTitle}::${selectedLessonsKey}`;
+    const activeLang = isRTL ? 'ar' : 'en';
+    const reqKey = `${bookTitle}::${selectedLessonsKey}::${activeLang}`;
     if (lastSummaryKeyRef.current === reqKey) return;
     lastSummaryKeyRef.current = reqKey;
 
@@ -104,7 +105,7 @@ export const LessonSummaryModal: React.FC<LessonSummaryModalProps> = ({
     setCanScrollDown(true);
 
     lessonSummaryService
-      .generateSummary(currentLessons, bookTitle, pdfDoc)
+      .generateSummary(currentLessons, bookTitle, pdfDoc, activeLang)
       .then((res) => {
         if (isCancelled) return;
         setSummary(res);

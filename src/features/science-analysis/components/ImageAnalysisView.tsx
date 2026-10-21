@@ -21,29 +21,42 @@ export interface ImageAnalysisViewProps {
 function renderDistinctionText(content: string) {
   if (!content) return null;
   const parts = content.split(
-    /(\[مذكور أو ظاهر في الصفحة\]|\[استنتاج من العنصر\]|مذكور أو ظاهر في الصفحة|استنتاج من العنصر)/g
+    /(\[مذكور أو ظاهر في الصفحة\]|\[استنتاج من العنصر\]|مذكور أو ظاهر في الصفحة|استنتاج من العنصر|\[Visible on Page\]|\[Inferred from Element\]|Visible on Page|Inferred from Element)/gi
   );
 
   return (
     <span>
       {parts.map((part, i) => {
-        if (part === '[مذكور أو ظاهر في الصفحة]' || part === 'مذكور أو ظاهر في الصفحة') {
+        const lower = part.toLowerCase();
+        if (
+          part === '[مذكور أو ظاهر في الصفحة]' ||
+          part === 'مذكور أو ظاهر في الصفحة' ||
+          lower === '[visible on page]' ||
+          lower === 'visible on page'
+        ) {
+          const isEn = lower.includes('visible');
           return (
             <span
               key={i}
               className="inline-block bg-blue-100 text-blue-900 font-bold text-[10px] px-1.5 py-0.5 rounded-md mx-1 border border-blue-200"
             >
-              مذكور أو ظاهر في الصفحة
+              {isEn ? 'Visible on Page' : 'مذكور أو ظاهر في الصفحة'}
             </span>
           );
         }
-        if (part === '[استنتاج من العنصر]' || part === 'استنتاج من العنصر') {
+        if (
+          part === '[استنتاج من العنصر]' ||
+          part === 'استنتاج من العنصر' ||
+          lower === '[inferred from element]' ||
+          lower === 'inferred from element'
+        ) {
+          const isEn = lower.includes('inferred');
           return (
             <span
               key={i}
               className="inline-block bg-indigo-100 text-indigo-900 font-bold text-[10px] px-1.5 py-0.5 rounded-md mx-1 border border-indigo-200"
             >
-              استنتاج من العنصر
+              {isEn ? 'Inferred from Element' : 'استنتاج من العنصر'}
             </span>
           );
         }

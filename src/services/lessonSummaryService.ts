@@ -39,10 +39,31 @@ export interface LessonSummary {
 }
 
 /**
- * Formats raw book filenames (like mathematics_part1_9th) into clean Arabic curriculum titles
+ * Formats raw book filenames (like mathematics_part1_9th) into clean curriculum titles
  */
-function formatBookDisplayName(rawTitle: string): string {
+function formatBookDisplayName(rawTitle: string, lang: 'ar' | 'en' = 'ar'): string {
   const lower = (rawTitle || '').toLowerCase();
+  if (lang === 'en') {
+    if ((lower.includes('mathematics') || lower.includes('math')) && lower.includes('9')) {
+      return 'Mathematics Part 1 - Grade 9';
+    }
+    if (lower.includes('mathematics') || lower.includes('math')) {
+      return 'Mathematics & Algebra';
+    }
+    if (lower.includes('graphic_9th') || lower.includes('geo9')) {
+      return 'Geography of the Republic of Yemen - Grade 9';
+    }
+    if (lower.includes('bio')) {
+      return 'Biology & Life Sciences';
+    }
+    if (lower.includes('geo')) {
+      return 'Geographical Studies';
+    }
+    return rawTitle || 'Noon Curriculum';
+  }
+  if ((lower.includes('mathematics') || lower.includes('math')) && lower.includes('9')) {
+    return 'الرياضيات - الجزء الأول - الصف التاسع الأساسي';
+  }
   if (lower.includes('mathematics') || lower.includes('math')) {
     return 'الرياضيات والجبر';
   }
@@ -1053,10 +1074,13 @@ export const lessonSummaryService = {
   buildSingleLessonCompleteSummary(
     lesson: BookLesson,
     bookTitle: string,
-    extractedPdfText: string
+    extractedPdfText: string,
+    lang: 'ar' | 'en' = 'ar'
   ): Omit<LessonSummary, 'confidence'> {
-    // 1. Check if lesson exists in our rich curriculum bank
-    const bankMatch = CURRICULUM_SUMMARIES_BANK[lesson.id];
+    const isEnglish = lang === 'en';
+
+    // 1. Check if lesson exists in our rich curriculum bank (for Arabic)
+    const bankMatch = !isEnglish ? CURRICULUM_SUMMARIES_BANK[lesson.id] : undefined;
     if (bankMatch) {
       return {
         ...bankMatch,
@@ -1072,14 +1096,18 @@ export const lessonSummaryService = {
     }
 
     // 2. Otherwise synthesize a rich, detailed summary from lesson.summary, lesson.keyConcepts, lesson.curriculumContext, and extractedPdfText
-    const cleanBookName = formatBookDisplayName(bookTitle);
+    const cleanBookName = formatBookDisplayName(bookTitle, lang);
     const pageRange = lesson.endPageNumber && lesson.endPageNumber !== lesson.pageNumber
-      ? `صفحات ${lesson.pageNumber}-${lesson.endPageNumber}`
-      : `صفحة ${lesson.pageNumber}`;
+      ? isEnglish
+        ? `Pages ${lesson.pageNumber}-${lesson.endPageNumber}`
+        : `صفحات ${lesson.pageNumber}-${lesson.endPageNumber}`
+      : isEnglish
+        ? `Page ${lesson.pageNumber}`
+        : `صفحة ${lesson.pageNumber}`;
 
     const sections: SummarySection[] = [];
 
-    // Section 1: خلاصة الدرس
+    // Section 1: خلاصة الدرس / Lesson Overview
     const summaryItems: string[] = [];
     if (lesson.summary) {
       summaryItems.push(lesson.summary);
@@ -1105,23 +1133,25 @@ export const lessonSummaryService = {
     }
     if (summaryItems.length === 0) {
       summaryItems.push(
-        `يتناول ${lesson.title} المحاور والمفاهيم الأساسية المقررة في ${lesson.unitTitle || cleanBookName} (${pageRange}).`
+        isEnglish
+          ? `${lesson.title} covers the core curricular concepts and educational objectives in ${lesson.unitTitle || cleanBookName} (${pageRange}).`
+          : `يتناول ${lesson.title} المحاور والمفاهيم الأساسية المقررة في ${lesson.unitTitle || cleanBookName} (${pageRange}).`
       );
     }
 
     sections.push({
-      type: 'خلاصة الدرس',
-      title: `خلاصة ${lesson.title}`,
+      type: isEnglish ? 'Lesson Overview' : 'خلاصة الدرس',
+      title: isEnglish ? `Summary of ${lesson.title}` : `خلاصة ${lesson.title}`,
       visible: true,
       lessonTitle: lesson.title,
       items: summaryItems,
     });
 
-    // Section 2: أهم النقاط والمفاهيم الأساسية
+    // Section 2: أهم النقاط والمفاهيم الأساسية / Key Points
     if (lesson.keyConcepts && lesson.keyConcepts.length > 0) {
       sections.push({
-        type: 'أهم النقاط',
-        title: 'أهم النقاط والمفاهيم المحورية في الدرس',
+        type: isEnglish ? 'Key Points' : 'أهم النقاط',
+        title: isEnglish ? 'Key Points & Core Concepts' : 'أهم النقاط والمفاهيم المحورية في الدرس',
         visible: true,
         lessonTitle: lesson.title,
         items: lesson.keyConcepts,
@@ -1153,8 +1183,8 @@ export const lessonSummaryService = {
 
     if (definitions.length > 0) {
       sections.push({
-        type: 'المصطلحات والتعريفات',
-        title: 'المصطلحات والتعريفات والتفاصيل المنهجية',
+        type: isEnglish ? 'Terms & Definitions' : 'المصطلحات والتعريفات',
+        title: isEnglish ? 'Terminology, Definitions & Curricular Details' : 'المصطلحات والتعريفات والتفاصيل المنهجية',
         visible: true,
         lessonTitle: lesson.title,
         items: definitions,
@@ -1163,8 +1193,8 @@ export const lessonSummaryService = {
 
     if (lawsAndFormulas.length > 0) {
       sections.push({
-        type: 'القوانين أو القواعد أو المعادلات',
-        title: 'القوانين والقواعد والمعادلات المعتمدة',
+        type: isEnglish ? 'Laws, Rules & Equations' : 'القوانين أو القواعد أو المعادلات',
+        title: isEnglish ? 'Approved Formulas, Rules & Equations' : 'القوانين والقواعد والمعادلات المعتمدة',
         visible: true,
         lessonTitle: lesson.title,
         items: lawsAndFormulas,
@@ -1175,16 +1205,16 @@ export const lessonSummaryService = {
     const reviewPoints: string[] = [];
     if (lesson.keyConcepts && lesson.keyConcepts.length > 0) {
       lesson.keyConcepts.forEach((c) => {
-        reviewPoints.push(`التركيز عند المراجعة على: ${c}`);
+        reviewPoints.push(isEnglish ? `Focus during review on: ${c}` : `التركيز عند المراجعة على: ${c}`);
       });
     }
     if (lesson.summary) {
-      reviewPoints.push(`الربط بين محاور الدرس: ${lesson.summary}`);
+      reviewPoints.push(isEnglish ? `Connecting lesson themes: ${lesson.summary}` : `الربط بين محاور الدرس: ${lesson.summary}`);
     }
     if (reviewPoints.length > 0) {
       sections.push({
-        type: 'نقاط تستحق المراجعة',
-        title: 'نقاط تستحق المراجعة والتركيز',
+        type: isEnglish ? 'Review Takeaways' : 'نقاط تستحق المراجعة',
+        title: isEnglish ? 'Important Points for Exam Review' : 'نقاط تستحق المراجعة والتركيز',
         visible: true,
         lessonTitle: lesson.title,
         items: reviewPoints,
@@ -1200,14 +1230,20 @@ export const lessonSummaryService = {
           const term = parts[0].trim();
           const explanation = parts.slice(1).join(':').trim();
           reviewQuestions.push({
-            question: `وضّح المقصود أو القاعدة الخاصة بـ «${term}» كما ورد في ${lesson.title}؟`,
+            question: isEnglish
+              ? `Explain the concept or rule of "${term}" as presented in ${lesson.title}?`
+              : `وضّح المقصود أو القاعدة الخاصة بـ «${term}» كما ورد في ${lesson.title}؟`,
             answer: explanation,
             lessonTitle: lesson.title,
           });
         } else {
           reviewQuestions.push({
-            question: `اشرح الفكرة العلمية التالية الواردة في الدرس: (${concept})؟`,
-            answer: `تُعد هذه الفكرة من المرتكزات الأساسية في ${lesson.title} (${pageRange})، حيث توضح أنه: ${concept}.`,
+            question: isEnglish
+              ? `Explain the following scientific principle from the lesson: (${concept})?`
+              : `اشرح الفكرة العلمية التالية الواردة في الدرس: (${concept})؟`,
+            answer: isEnglish
+              ? `This is a foundational concept in ${lesson.title} (${pageRange}): ${concept}.`
+              : `تُعد هذه الفكرة من المرتكزات الأساسية في ${lesson.title} (${pageRange})، حيث توضح أنه: ${concept}.`,
             lessonTitle: lesson.title,
           });
         }
@@ -1216,22 +1252,28 @@ export const lessonSummaryService = {
 
     if (lesson.summary) {
       reviewQuestions.push({
-        question: `لخّص المحاور الأساسية التي يتناولها «${lesson.title}»؟`,
+        question: isEnglish
+          ? `Summarize the main educational themes covered in "${lesson.title}"?`
+          : `لخّص المحاور الأساسية التي يتناولها «${lesson.title}»؟`,
         answer: lesson.summary,
         lessonTitle: lesson.title,
       });
     }
 
     return {
-      title: `ملخص شامل: ${lesson.title}`,
+      title: isEnglish ? `Comprehensive Summary: ${lesson.title}` : `ملخص شامل: ${lesson.title}`,
       lessonTitles: [lesson.title],
       sourcePages: pageRange,
       overview:
         lesson.summary ||
-        `ملخص تفصيلي شامل يغطي جميع مفاهيم وعناصر ${lesson.title} من كتاب ${cleanBookName} (${pageRange}).`,
+        (isEnglish
+          ? `Comprehensive study summary covering all concepts and elements of ${lesson.title} from ${cleanBookName} (${pageRange}).`
+          : `ملخص تفصيلي شامل يغطي جميع مفاهيم وعناصر ${lesson.title} من كتاب ${cleanBookName} (${pageRange}).`),
       sections,
       reviewQuestions,
-      quickReview: `راجع مفاهيم ${lesson.title} (${pageRange}) وتأكد من استيعاب النقاط الأساسية والإجابة عن أسئلة المراجعة أعلاه.`,
+      quickReview: isEnglish
+        ? `Review the concepts of ${lesson.title} (${pageRange}) and make sure you understand the key points and can answer the review questions above.`
+        : `راجع مفاهيم ${lesson.title} (${pageRange}) وتأكد من استيعاب النقاط الأساسية والإجابة عن أسئلة المراجعة أعلاه.`,
     };
   },
 
@@ -1241,13 +1283,15 @@ export const lessonSummaryService = {
   async generateSummary(
     lessons: BookLesson[],
     bookTitle: string = 'منهاج نون الدراسي',
-    pdfDoc?: pdfjsLib.PDFDocumentProxy | null
+    pdfDoc?: pdfjsLib.PDFDocumentProxy | null,
+    lang: 'ar' | 'en' = 'ar'
   ): Promise<LessonSummary> {
+    const isEnglish = lang === 'en';
     if (!lessons || lessons.length === 0) {
-      throw new Error('لم يتم تحديد أي درس للتلخيص.');
+      throw new Error(isEnglish ? 'No lesson selected for summary.' : 'لم يتم تحديد أي درس للتلخيص.');
     }
 
-    const cleanBookName = formatBookDisplayName(bookTitle);
+    const cleanBookName = formatBookDisplayName(bookTitle, lang);
 
     // Extract PDF text for each selected lesson if pdfDoc is available
     const pdfTextsByLessonId: Record<string, string> = {};
@@ -1263,20 +1307,24 @@ export const lessonSummaryService = {
     }
 
     // Build complete local curricular summaries for every selected lesson first
-    // (This serves both as rich context for Gemini AND as a 100% comprehensive multi-lesson synthesis!)
     const perLessonSummaries = lessons.map((lesson) => ({
       lesson,
       data: this.buildSingleLessonCompleteSummary(
         lesson,
         cleanBookName,
-        pdfTextsByLessonId[lesson.id] || ''
+        pdfTextsByLessonId[lesson.id] || '',
+        lang
       ),
     }));
 
     const lessonTitlesList = lessons.map((l) => l.title);
     const pagesString = lessons
-      .map((l) => `ص ${l.pageNumber}${l.endPageNumber && l.endPageNumber !== l.pageNumber ? `-${l.endPageNumber}` : ''}`)
-      .join(' ، ');
+      .map((l) =>
+        isEnglish
+          ? `p. ${l.pageNumber}${l.endPageNumber && l.endPageNumber !== l.pageNumber ? `-${l.endPageNumber}` : ''}`
+          : `ص ${l.pageNumber}${l.endPageNumber && l.endPageNumber !== l.pageNumber ? `-${l.endPageNumber}` : ''}`
+      )
+      .join(isEnglish ? ', ' : ' ، ');
 
     // Build Lesson Breakdowns so when multiple lessons are selected, each lesson is also clearly presented in full detail
     const lessonBreakdowns: LessonBreakdown[] = perLessonSummaries.map(({ lesson, data }) => ({
@@ -1285,8 +1333,12 @@ export const lessonSummaryService = {
       unitTitle: lesson.unitTitle,
       pageRange:
         lesson.endPageNumber && lesson.endPageNumber !== lesson.pageNumber
-          ? `صفحات ${lesson.pageNumber}-${lesson.endPageNumber}`
-          : `صفحة ${lesson.pageNumber}`,
+          ? isEnglish
+            ? `Pages ${lesson.pageNumber}-${lesson.endPageNumber}`
+            : `صفحات ${lesson.pageNumber}-${lesson.endPageNumber}`
+          : isEnglish
+            ? `Page ${lesson.pageNumber}`
+            : `صفحة ${lesson.pageNumber}`,
       overview: data.overview,
       sections: data.sections,
     }));
@@ -1298,17 +1350,54 @@ export const lessonSummaryService = {
         const sectionsText = data.sections
           .map((s) => `  * ${s.title}:\n    - ${s.items.join('\n    - ')}`)
           .join('\n');
-        return `=== الدرس (${idx + 1}): ${lesson.title} (صفحات ${lesson.pageNumber}-${lesson.endPageNumber || lesson.pageNumber}) ===
-الوحدة: ${lesson.unitTitle || 'الوحدة الدراسية'}
-ملخص الدرس: ${lesson.summary || data.overview}
-المفاهيم الأساسية: ${(lesson.keyConcepts || []).join(' | ')}
-سياق المنهج التفصيلي:
+        return `=== Lesson (${idx + 1}): ${lesson.title} (Pages ${lesson.pageNumber}-${lesson.endPageNumber || lesson.pageNumber}) ===
+Unit: ${lesson.unitTitle || 'Study Unit'}
+Lesson Summary: ${lesson.summary || data.overview}
+Key Concepts: ${(lesson.keyConcepts || []).join(' | ')}
+Detailed Curricular Context:
 ${sectionsText}
-${pdfText ? `النص المستخرج من صفحات الكتاب:\n${pdfText.slice(0, 2500)}` : ''}`;
+${pdfText ? `Extracted Textbook Text:\n${pdfText.slice(0, 2500)}` : ''}`;
       })
       .join('\n\n');
 
-    const promptText = `
+    const promptText = isEnglish
+      ? `
+You are an expert teacher preparing a comprehensive, in-depth study and review summary in **English** for the following selected lessons from "${cleanBookName}":
+${lessons.map((l, i) => `${i + 1}. ${l.title} (Pages ${l.pageNumber}-${l.endPageNumber || l.pageNumber})`).join('\n')}
+
+Full Curricular Content of the Selected Lessons:
+"""
+${richContextForPrompt}
+"""
+
+CRITICAL INSTRUCTIONS:
+1. Write ALL output fields ("title", "overview", "sections", "reviewQuestions", "quickReview") in clear, accurate academic **English** (translate any Arabic curriculum concepts, laws, definitions, and examples into English).
+2. Cover all ideas, explanations, terminology & definitions, formulas & equations, step-by-step procedures, solved examples, and review points for each selected lesson.
+3. Include 5 to 8 rich review Q&A items in "reviewQuestions" in English.
+4. Output ONLY valid JSON matching this exact structure:
+{
+  "title": "Comprehensive Summary Title in English",
+  "lessonTitles": ${JSON.stringify(lessonTitlesList)},
+  "sourcePages": "${pagesString}",
+  "overview": "Comprehensive English introduction describing the lessons and what this summary covers",
+  "sections": [
+    {
+      "type": "Lesson Overview | Key Points | Terms & Definitions | Laws, Rules & Equations | Steps & Sequence | Comparisons | Important Examples | Review Takeaways",
+      "title": "Detailed Section Title in English",
+      "visible": true,
+      "items": ["Detailed English point 1", "Detailed English point 2"]
+    }
+  ],
+  "reviewQuestions": [
+    {
+      "question": "Comprehensive review question in English?",
+      "answer": "Complete model answer in English."
+    }
+  ],
+  "quickReview": "Concise final takeaway and exam tip in English",
+  "confidence": 98
+}`
+      : `
 أنت معلم خبير وطالب متفوق يجهز ورقة مراجعة وتلخيص شاملة ووافية باللغة العربية الفصحى للدروس التالية المحددة من كتاب "${cleanBookName}":
 ${lessons.map((l, i) => `${i + 1}. ${l.title} (صفحات ${l.pageNumber}-${l.endPageNumber || l.pageNumber})`).join('\n')}
 
@@ -1347,12 +1436,28 @@ ${richContextForPrompt}
 }`;
 
     try {
+      let pageSnapshotImage = '';
+      const totalExtractedTextLen = Array.from(extractedTextsMap.values()).reduce(
+        (acc, t) => acc + t.length,
+        0
+      );
+      if (pdfDoc && totalExtractedTextLen < 120) {
+        pageSnapshotImage = await pdfService.renderPageToDataUrl(
+          pdfDoc,
+          lessons[0].pageNumber,
+          null,
+          1200
+        );
+      }
+
       const aiResponse = await aiGateway.execute('lessonSummary', {
         pageNumber: lessons[0].pageNumber,
         selectionType: 'curriculum-summary',
         bookTitle: cleanBookName,
-        lessonTitle: lessonTitlesList.join(' ، '),
+        lessonTitle: lessonTitlesList.join(isEnglish ? ', ' : ' ، '),
         selectedText: promptText,
+        selectedImage: pageSnapshotImage || undefined,
+        language: lang,
       });
 
       if (aiResponse && aiResponse.success && aiResponse.text) {
@@ -1383,10 +1488,6 @@ ${richContextForPrompt}
       console.warn('Using comprehensive curricular summary synthesis:', e);
     }
 
-    // ============================================================================
-    // Comprehensive Curricular Synthesis (Single or Multi-Lesson Full-Content Mode)
-    // Never truncates or squeezes into 1 screen; outputs ALL sections & questions!
-    // ============================================================================
     if (lessons.length === 1) {
       const single = perLessonSummaries[0].data;
       return {
@@ -1395,12 +1496,10 @@ ${richContextForPrompt}
       };
     }
 
-    // Multi-Lesson Comprehensive Synthesis:
-    // Combine all sections across all selected lessons organized clearly by lesson and topic
     const combinedSections: SummarySection[] = [];
     const combinedQuestions: ReviewQuestion[] = [];
 
-    perLessonSummaries.forEach(({ lesson, data }, idx) => {
+    perLessonSummaries.forEach(({ lesson, data }) => {
       const lessonPrefix = `[${lesson.title}]`;
       data.sections.forEach((sec) => {
         combinedSections.push({
@@ -1422,10 +1521,14 @@ ${richContextForPrompt}
     });
 
     return {
-      title: `ملخص مراجعة شامل ومفصل (${lessons.length} دروس محددة)`,
+      title: isEnglish
+        ? `Comprehensive Review Summary (${lessons.length} Selected Lessons)`
+        : `ملخص مراجعة شامل ومفصل (${lessons.length} دروس محددة)`,
       lessonTitles: lessonTitlesList,
       sourcePages: pagesString,
-      overview: `ملخص دراسي شامل ومفصّل يغطي كامل المحتوى العلمي لعدد (${lessons.length}) دروس محددة من كتاب «${cleanBookName}» (${pagesString}). تم تنظيم الملخص ليشمل خلاصة كل درس، وأهم النقاط، والمصطلحات والتعريفات، والقوانين والمعادلات، وخطوات الحل، والأمثلة التطبيقية، وأسئلة المراجعة الشاملة.`,
+      overview: isEnglish
+        ? `A comprehensive and detailed study summary covering the full curriculum content of (${lessons.length}) selected lessons from "${cleanBookName}" (${pagesString}). Organized to include lesson overviews, key concepts, definitions, formulas, step-by-step methods, examples, and review questions.`
+        : `ملخص دراسي شامل ومفصّل يغطي كامل المحتوى العلمي لعدد (${lessons.length}) دروس محددة من كتاب «${cleanBookName}» (${pagesString}). تم تنظيم الملخص ليشمل خلاصة كل درس، وأهم النقاط، والمصطلحات والتعريفات، والقوانين والمعادلات، وخطوات الحل، والأمثلة التطبيقية، وأسئلة المراجعة الشاملة.`,
       sections: combinedSections,
       lessonBreakdowns,
       reviewQuestions: combinedQuestions,

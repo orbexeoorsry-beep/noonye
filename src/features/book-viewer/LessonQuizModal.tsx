@@ -25,7 +25,8 @@ export const LessonQuizModal: React.FC<LessonQuizModalProps> = ({
   onJumpToPage,
   onQuizCompleted,
 }) => {
-  const { t, isRTL } = useI18n();
+  const { lang, isRTL } = useI18n();
+  const isEnglish = lang === 'en';
 
   // Mode: 'quiz' (taking quiz) | 'multiSelect' (picking multiple lessons) | 'result' (viewing score)
   const [mode, setMode] = useState<'quiz' | 'multiSelect' | 'result'>('quiz');
@@ -43,7 +44,7 @@ export const LessonQuizModal: React.FC<LessonQuizModalProps> = ({
   const [isAnswerSubmitted, setIsAnswerSubmitted] = useState(false);
   const [result, setResult] = useState<QuizResult | null>(null);
 
-  // Initialize questions when modal opens or initialLesson ID changes
+  // Initialize questions when modal opens or initialLesson ID or language changes
   useEffect(() => {
     if (isOpen) {
       const targetLessons = initialLesson
@@ -54,10 +55,10 @@ export const LessonQuizModal: React.FC<LessonQuizModalProps> = ({
       setSelectedLessonIds(targetLessons.map((l) => l.id));
       startQuizWithLessons(targetLessons);
     }
-  }, [isOpen, initialLesson?.id]);
+  }, [isOpen, initialLesson?.id, lang]);
 
   const startQuizWithLessons = (lessonsToTest: BookLesson[]) => {
-    const generatedQuestions = lessonQuizService.getQuestionsForLessons(lessonsToTest);
+    const generatedQuestions = lessonQuizService.getQuestionsForLessons(lessonsToTest, lang);
     setQuestions(generatedQuestions);
     setCurrentQuestionIndex(0);
     setSelectedAnswers({});
@@ -102,7 +103,7 @@ export const LessonQuizModal: React.FC<LessonQuizModalProps> = ({
       setCurrentQuestionIndex((prev) => prev + 1);
       setIsAnswerSubmitted(Boolean(questions[currentQuestionIndex + 1] && selectedAnswers[questions[currentQuestionIndex + 1].id] !== undefined));
     } else {
-      const evaluation = lessonQuizService.evaluateQuiz(questions, selectedAnswers);
+      const evaluation = lessonQuizService.evaluateQuiz(questions, selectedAnswers, lang);
       setResult(evaluation);
       setMode('result');
     }
@@ -128,7 +129,10 @@ export const LessonQuizModal: React.FC<LessonQuizModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5 overflow-y-auto animate-in fade-in duration-200 motion-reduce:animate-none">
+    <div
+      className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5 overflow-y-auto animate-in fade-in duration-200 motion-reduce:animate-none"
+      dir={isRTL ? 'rtl' : 'ltr'}
+    >
       <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-2xl max-h-[92vh] flex flex-col overflow-hidden relative animate-in zoom-in-95 duration-200 motion-reduce:animate-none">
         {/* Header */}
         <header className="px-5 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/80">
@@ -140,18 +144,28 @@ export const LessonQuizModal: React.FC<LessonQuizModalProps> = ({
               <div className="flex items-center gap-2">
                 <h3 className="text-sm font-bold text-slate-900 font-display">
                   {mode === 'multiSelect'
-                    ? 'اختيار عدة دروس للاختبار الشامل'
+                    ? isEnglish
+                      ? 'Select Multiple Lessons for Quiz'
+                      : 'اختيار عدة دروس للاختبار الشامل'
                     : mode === 'result'
-                    ? 'نتيجة ودرجة الاختبار'
+                    ? isEnglish
+                      ? 'Quiz Score & Evaluation'
+                      : 'نتيجة ودرجة الاختبار'
+                    : isEnglish
+                    ? 'Noon Interactive Quiz'
                     : 'اختبار نون التفاعلي'}
                 </h3>
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-700 flex items-center gap-1 font-sans">
                   <AppIcon name="award" size="xs" />
-                  تقييم جيمني
+                  {isEnglish ? 'Gemini Assessment' : 'تقييم جيمني'}
                 </span>
               </div>
               <p className="text-[11px] text-slate-500 line-clamp-1 font-sans">
-                {mode === 'quiz' && currentQ ? currentQ.lessonTitle : 'اختبار منهجي يقيس الفهم والاستيعاب بدقة'}
+                {mode === 'quiz' && currentQ
+                  ? currentQ.lessonTitle
+                  : isEnglish
+                  ? 'Curricular quiz measuring comprehension and mastery accurately'
+                  : 'اختبار منهجي يقيس الفهم والاستيعاب بدقة'}
               </p>
             </div>
           </div>
@@ -162,11 +176,13 @@ export const LessonQuizModal: React.FC<LessonQuizModalProps> = ({
                 name="layers"
                 iconSize="xs"
                 variant="outline"
-                label="تحديد عدة دروس"
+                label={isEnglish ? 'Select multiple lessons' : 'تحديد عدة دروس'}
                 onClick={() => setMode('multiSelect')}
                 className="px-2.5 py-1.5"
               >
-                <span className="hidden sm:inline font-sans text-xs">عدة دروس</span>
+                <span className="hidden sm:inline font-sans text-xs">
+                  {isEnglish ? 'Multi-Lesson' : 'عدة دروس'}
+                </span>
               </IconButton>
             )}
 
@@ -174,7 +190,7 @@ export const LessonQuizModal: React.FC<LessonQuizModalProps> = ({
               name="close"
               iconSize="sm"
               variant="ghost"
-              label="إغلاق"
+              label={isEnglish ? 'Close' : 'إغلاق'}
               onClick={onClose}
               className="min-h-[40px] min-w-[40px] text-slate-400 hover:text-slate-700"
             />
@@ -189,10 +205,14 @@ export const LessonQuizModal: React.FC<LessonQuizModalProps> = ({
               <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-4 text-xs text-indigo-900 font-sans">
                 <p className="font-bold mb-1 flex items-center gap-1.5 font-display">
                   <AppIcon name="layers" size="sm" className="text-indigo-600" />
-                  حدد الدروس التي ترغب في تضمينها في الاختبار:
+                  {isEnglish
+                    ? 'Select the lessons you want to include in the quiz:'
+                    : 'حدد الدروس التي ترغب في تضمينها في الاختبار:'}
                 </p>
                 <p className="text-indigo-700 text-[11px]">
-                  سيقوم نظام جيمني بجمع أسئلة شاملة ومتنوعة من كافة الدروس التي تختارها لقياس مدى ترابط المعلومات لديك.
+                  {isEnglish
+                    ? 'Gemini will compile comprehensive questions across all selected lessons to measure your knowledge integration.'
+                    : 'سيقوم نظام جيمني بجمع أسئلة شاملة ومتنوعة من كافة الدروس التي تختارها لقياس مدى ترابط المعلومات لديك.'}
                 </p>
               </div>
 
@@ -228,7 +248,7 @@ export const LessonQuizModal: React.FC<LessonQuizModalProps> = ({
                       </div>
 
                       <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-md bg-white border border-slate-200 text-slate-600">
-                        ص {lesson.pageNumber}
+                        {isEnglish ? `p. ${lesson.pageNumber}` : `ص ${lesson.pageNumber}`}
                       </span>
                     </div>
                   );
@@ -241,7 +261,9 @@ export const LessonQuizModal: React.FC<LessonQuizModalProps> = ({
                   onClick={() => setSelectedLessonIds(allLessons.map((l) => l.id))}
                   className="text-xs text-indigo-600 font-bold hover:underline font-sans min-h-[44px] flex items-center"
                 >
-                  تحديد كافة الدروس ({allLessons.length})
+                  {isEnglish
+                    ? `Select All Lessons (${allLessons.length})`
+                    : `تحديد كافة الدروس (${allLessons.length})`}
                 </button>
 
                 <div className="flex items-center gap-2">
@@ -250,7 +272,7 @@ export const LessonQuizModal: React.FC<LessonQuizModalProps> = ({
                     onClick={() => setMode('quiz')}
                     className="min-h-[44px] px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-colors"
                   >
-                    إلغاء
+                    {isEnglish ? 'Cancel' : 'إلغاء'}
                   </button>
                   <button
                     type="button"
@@ -258,7 +280,9 @@ export const LessonQuizModal: React.FC<LessonQuizModalProps> = ({
                     disabled={selectedLessonIds.length === 0}
                     className="min-h-[44px] px-5 py-2.5 rounded-xl bg-indigo-600 text-white font-bold text-xs hover:bg-indigo-700 disabled:opacity-40 transition-colors shadow-xs active:scale-[0.98] motion-reduce:transform-none"
                   >
-                    بدء الاختبار ({selectedLessonIds.length} دروس)
+                    {isEnglish
+                      ? `Start Quiz (${selectedLessonIds.length} Lessons)`
+                      : `بدء الاختبار (${selectedLessonIds.length} دروس)`}
                   </button>
                 </div>
               </div>
@@ -273,11 +297,13 @@ export const LessonQuizModal: React.FC<LessonQuizModalProps> = ({
                 <div className="flex items-center justify-between text-xs font-semibold text-slate-600 mb-2 font-sans">
                   <span className="flex items-center gap-1.5">
                     <span className="w-2 h-2 rounded-full bg-indigo-600" />
-                    السؤال {currentQuestionIndex + 1} من {totalQ}
+                    {isEnglish
+                      ? `Question ${currentQuestionIndex + 1} of ${totalQ}`
+                      : `السؤال ${currentQuestionIndex + 1} من ${totalQ}`}
                   </span>
                   {currentQ.topic && (
                     <span className="bg-slate-100 px-2.5 py-0.5 rounded-lg text-slate-600 text-[11px] font-medium font-sans">
-                      المحور: {currentQ.topic}
+                      {isEnglish ? `Topic: ${currentQ.topic}` : `المحور: ${currentQ.topic}`}
                     </span>
                   )}
                 </div>
@@ -305,7 +331,7 @@ export const LessonQuizModal: React.FC<LessonQuizModalProps> = ({
                 {currentQ.options.map((option, idx) => {
                   const isSelected = currentAnswer === idx;
                   const isCorrect = idx === currentQ.correctIndex;
-                  const optionLetters = ['أ', 'ب', 'ج', 'د'];
+                  const optionLetters = isEnglish ? ['A', 'B', 'C', 'D'] : ['أ', 'ب', 'ج', 'د'];
 
                   let optionStyles = 'border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-slate-800';
 
@@ -327,7 +353,7 @@ export const LessonQuizModal: React.FC<LessonQuizModalProps> = ({
                       type="button"
                       onClick={() => handleSelectOption(idx)}
                       disabled={isAnswerSubmitted}
-                      className={`w-full min-h-[48px] p-3.5 sm:p-4 rounded-2xl border text-right transition-all flex items-center justify-between gap-3 text-xs sm:text-sm font-medium select-none active:scale-[0.99] motion-reduce:transform-none font-sans ${optionStyles}`}
+                      className={`w-full min-h-[48px] p-3.5 sm:p-4 rounded-2xl border ${isRTL ? 'text-right' : 'text-left'} transition-all flex items-center justify-between gap-3 text-xs sm:text-sm font-medium select-none active:scale-[0.99] motion-reduce:transform-none font-sans ${optionStyles}`}
                     >
                       <div className="flex items-center gap-3">
                         <span
@@ -368,12 +394,22 @@ export const LessonQuizModal: React.FC<LessonQuizModalProps> = ({
                   className="min-h-[40px] flex items-center gap-1.5 text-xs font-semibold text-amber-700 hover:text-amber-800 bg-amber-50 hover:bg-amber-100/80 px-3 py-1.5 rounded-xl border border-amber-200/80 transition-colors active:scale-[0.98] motion-reduce:transform-none"
                 >
                   <AppIcon name="lightbulb" size="xs" className="text-amber-600" />
-                  <span>{isHintOpen ? 'إخفاء التلميح' : '💡 تلميح استدلالي من جيمني'}</span>
+                  <span>
+                    {isHintOpen
+                      ? isEnglish
+                        ? 'Hide Hint'
+                        : 'إخفاء التلميح'
+                      : isEnglish
+                      ? '💡 Gemini Guided Hint'
+                      : '💡 تلميح استدلالي من جيمني'}
+                  </span>
                 </button>
 
                 {isHintOpen && (
                   <div className="mt-2.5 p-3.5 rounded-2xl bg-amber-50/80 border border-amber-200 text-xs text-amber-900 leading-relaxed animate-in fade-in duration-200 motion-reduce:animate-none font-sans">
-                    <span className="font-bold text-amber-800 block mb-0.5">توجيه جيمني:</span>
+                    <span className="font-bold text-amber-800 block mb-0.5">
+                      {isEnglish ? 'Gemini Guidance:' : 'توجيه جيمني:'}
+                    </span>
                     {currentQ.hint}
                   </div>
                 )}
@@ -384,7 +420,11 @@ export const LessonQuizModal: React.FC<LessonQuizModalProps> = ({
                 <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-1.5 animate-in fade-in slide-in-from-top-2 duration-200 motion-reduce:animate-none font-sans">
                   <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800 font-display">
                     <AppIcon name="sparkles" size="xs" className="text-indigo-600" />
-                    <span>تفسير وتبرير الإجابة المنهجي:</span>
+                    <span>
+                      {isEnglish
+                        ? 'Curricular Explanation & Justification:'
+                        : 'تفسير وتبرير الإجابة المنهجي:'}
+                    </span>
                   </div>
                   <p className="text-xs text-slate-600 leading-relaxed font-sans">
                     {currentQ.explanation}
@@ -411,7 +451,9 @@ export const LessonQuizModal: React.FC<LessonQuizModalProps> = ({
                       {result.scorePercent}%
                     </span>
                     <span className="text-xs text-indigo-200 font-medium font-sans">
-                      ({result.correctAnswers} من {result.totalQuestions} إجابات صحيحة)
+                      {isEnglish
+                        ? `(${result.correctAnswers} of ${result.totalQuestions} correct)`
+                        : `(${result.correctAnswers} من ${result.totalQuestions} إجابات صحيحة)`}
                     </span>
                   </div>
 
@@ -424,7 +466,11 @@ export const LessonQuizModal: React.FC<LessonQuizModalProps> = ({
               {/* Detailed Question Review List */}
               <div className="space-y-3">
                 <h4 className="text-xs font-bold text-slate-800 flex items-center gap-1.5 font-display">
-                  <span>مراجعة الأسئلة وتصحيح المفاهيم:</span>
+                  <span>
+                    {isEnglish
+                      ? 'Question Review & Concept Correction:'
+                      : 'مراجعة الأسئلة وتصحيح المفاهيم:'}
+                  </span>
                 </h4>
 
                 <div className="space-y-2.5 max-h-[35vh] overflow-y-auto pr-1">
@@ -443,27 +489,33 @@ export const LessonQuizModal: React.FC<LessonQuizModalProps> = ({
                         </span>
                         {ans.isCorrect ? (
                           <span className="shrink-0 flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-md font-sans">
-                            <AppIcon name="checkCircle" size="xs" /> صحيح
+                            <AppIcon name="checkCircle" size="xs" /> {isEnglish ? 'Correct' : 'صحيح'}
                           </span>
                         ) : (
                           <span className="shrink-0 flex items-center gap-1 text-[11px] font-bold text-red-700 bg-red-100 px-2 py-0.5 rounded-md font-sans">
-                            <AppIcon name="xCircle" size="xs" /> خاطئ
+                            <AppIcon name="xCircle" size="xs" /> {isEnglish ? 'Incorrect' : 'خاطئ'}
                           </span>
                         )}
                       </div>
 
                       {!ans.isCorrect && (
                         <div className="mb-1 text-[11px] font-sans">
-                          <span className="text-slate-500">إجابتك: </span>
+                          <span className="text-slate-500">
+                            {isEnglish ? 'Your answer: ' : 'إجابتك: '}
+                          </span>
                           <span className="text-red-700 font-semibold">{ans.selectedOption}</span>
                           <span className="mx-2">·</span>
-                          <span className="text-slate-500">الإجابة الصحيحة: </span>
+                          <span className="text-slate-500">
+                            {isEnglish ? 'Correct answer: ' : 'الإجابة الصحيحة: '}
+                          </span>
                           <span className="text-emerald-700 font-semibold">{ans.correctOption}</span>
                         </div>
                       )}
 
                       <div className="text-[11px] text-slate-600 bg-white/70 rounded-xl p-2 mt-1.5 border border-slate-200/60 font-sans">
-                        <span className="font-semibold text-slate-700">توضيح: </span>
+                        <span className="font-semibold text-slate-700">
+                          {isEnglish ? 'Explanation: ' : 'توضيح: '}
+                        </span>
                         {ans.explanation}
                       </div>
                     </div>
@@ -483,7 +535,7 @@ export const LessonQuizModal: React.FC<LessonQuizModalProps> = ({
                 onClick={onClose}
                 className="min-h-[44px] px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-200/60 transition-colors active:scale-[0.98] motion-reduce:transform-none"
               >
-                متابعة القراءة
+                {isEnglish ? 'Continue Reading' : 'متابعة القراءة'}
               </button>
 
               <button
@@ -492,7 +544,15 @@ export const LessonQuizModal: React.FC<LessonQuizModalProps> = ({
                 disabled={!isAnswerSubmitted}
                 className="min-h-[44px] px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition-all shadow-xs disabled:opacity-40 flex items-center gap-1.5 active:scale-[0.98] motion-reduce:transform-none"
               >
-                <span>{currentQuestionIndex + 1 === totalQ ? 'عرض النتيجة والدرجة' : 'السؤال التالي'}</span>
+                <span>
+                  {currentQuestionIndex + 1 === totalQ
+                    ? isEnglish
+                      ? 'View Score & Result'
+                      : 'عرض النتيجة والدرجة'
+                    : isEnglish
+                    ? 'Next Question'
+                    : 'السؤال التالي'}
+                </span>
                 <AppIcon name={isRTL ? 'arrowLeft' : 'arrowRight'} size="xs" />
               </button>
             </>
@@ -506,7 +566,7 @@ export const LessonQuizModal: React.FC<LessonQuizModalProps> = ({
                 className="min-h-[44px] px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-700 hover:bg-slate-100 text-xs font-semibold flex items-center gap-1.5 transition-colors active:scale-[0.98] motion-reduce:transform-none"
               >
                 <AppIcon name="rotate" size="xs" />
-                <span>إعادة الاختبار</span>
+                <span>{isEnglish ? 'Retake Quiz' : 'إعادة الاختبار'}</span>
               </button>
 
               <div className="flex items-center gap-2">
@@ -520,7 +580,7 @@ export const LessonQuizModal: React.FC<LessonQuizModalProps> = ({
                     className="min-h-[44px] px-3.5 py-2.5 rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 text-xs font-semibold flex items-center gap-1.5 transition-colors active:scale-[0.98] motion-reduce:transform-none"
                   >
                     <AppIcon name="library" size="xs" />
-                    <span>صفحة الدرس</span>
+                    <span>{isEnglish ? 'Lesson Page' : 'صفحة الدرس'}</span>
                   </button>
                 )}
 
@@ -529,7 +589,7 @@ export const LessonQuizModal: React.FC<LessonQuizModalProps> = ({
                   onClick={onClose}
                   className="min-h-[44px] px-5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition-colors shadow-xs active:scale-[0.98] motion-reduce:transform-none"
                 >
-                  إنهاء ومتابعة القراءة
+                  {isEnglish ? 'Finish & Continue Reading' : 'إنهاء ومتابعة القراءة'}
                 </button>
               </div>
             </div>

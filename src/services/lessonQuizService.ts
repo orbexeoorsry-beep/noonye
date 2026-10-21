@@ -478,28 +478,100 @@ const CURRICULUM_QUESTIONS_BANK: Record<string, QuizQuestion[]> = {
   ],
 };
 
+const CURRICULUM_QUESTIONS_BANK_EN: Record<string, QuizQuestion[]> = {
+  'geo9-lesson-1': [
+    {
+      id: 'geo9-q1',
+      lessonId: 'geo9-lesson-1',
+      lessonTitle: 'Lesson 1: Astronomical & Geographical Location and Borders',
+      question: 'Where is the Republic of Yemen located astronomically relative to the Equator and the Prime Meridian?',
+      options: [
+        'Between latitudes 12° and 19° North, and longitudes 41° and 54° East',
+        'Between latitudes 20° and 30° North, and longitudes 30° and 40° East',
+        'Between latitudes 5° and 10° South, and longitudes 50° and 60° East',
+        'Between latitudes 15° and 25° North, and longitudes 35° and 45° West',
+      ],
+      correctIndex: 0,
+      explanation: 'According to the curriculum, Yemen extends astronomically between latitudes 12° and 19° North of the Equator, and longitudes 41° and 54° East of the Prime Meridian.',
+      hint: 'Yemen lies entirely in the Northern and Eastern hemispheres south of the Tropic of Cancer.',
+      topic: 'Astronomical Location',
+    },
+    {
+      id: 'geo9-q2',
+      lessonId: 'geo9-lesson-1',
+      lessonTitle: 'Lesson 1: Astronomical & Geographical Location and Borders',
+      question: 'What are the political borders of the Republic of Yemen to the North and South?',
+      options: [
+        'North: Kingdom of Saudi Arabia; South: Arabian Sea and Gulf of Aden',
+        'North: Sultanate of Oman; South: Red Sea',
+        'North: Red Sea; South: Indian Ocean',
+        'North: Saudi Arabia; South: Sultanate of Oman',
+      ],
+      correctIndex: 0,
+      explanation: 'Yemen is bordered to the north by the Kingdom of Saudi Arabia, and to the south by the Arabian Sea and the Gulf of Aden.',
+      hint: 'Recall the major neighboring country to the north and the open water body to the south.',
+      topic: 'Political Borders',
+    },
+    {
+      id: 'geo9-q3',
+      lessonId: 'geo9-lesson-1',
+      lessonTitle: 'Lesson 1: Astronomical & Geographical Location and Borders',
+      question: 'What is the approximate total area of the Republic of Yemen (excluding the Rub\' al Khali)?',
+      options: [
+        'About 555,000 km²',
+        'About 350,000 km²',
+        'About 750,000 km²',
+        'About 250,000 km²',
+      ],
+      correctIndex: 0,
+      explanation: 'The total area of the Republic of Yemen is approximately 555,000 km².',
+      hint: 'The number consists of three identical digits followed by three zeros.',
+      topic: 'Total Area',
+    },
+    {
+      id: 'geo9-q4',
+      lessonId: 'geo9-lesson-1',
+      lessonTitle: 'Lesson 1: Astronomical & Geographical Location and Borders',
+      question: 'Which strategic maritime strait is controlled by the Republic of Yemen?',
+      options: [
+        'Bab el-Mandeb Strait',
+        'Strait of Hormuz',
+        'Strait of Gibraltar',
+        'Bosphorus Strait',
+      ],
+      correctIndex: 0,
+      explanation: 'Yemen controls the strategic Bab el-Mandeb Strait linking the Red Sea to the Indian Ocean via the Gulf of Aden.',
+      hint: 'A strait located at the southern entrance of the Red Sea overseen by the Yemeni island of Mayyun.',
+      topic: 'Maritime Straits',
+    },
+  ],
+};
+
 export const lessonQuizService = {
   /**
    * Retrieves high quality questions for a selected set of lessons from ANY book
    */
-  getQuestionsForLessons(lessons: BookLesson[]): QuizQuestion[] {
+  getQuestionsForLessons(lessons: BookLesson[], lang: 'ar' | 'en' = 'ar'): QuizQuestion[] {
     if (!lessons || lessons.length === 0) return [];
+    const isEnglish = lang === 'en';
 
     const resultQuestions: QuizQuestion[] = [];
 
     // Collect questions from known curricula bank or generate contextual questions
     for (const lesson of lessons) {
-      if (CURRICULUM_QUESTIONS_BANK[lesson.id] && CURRICULUM_QUESTIONS_BANK[lesson.id].length > 0) {
+      if (isEnglish && CURRICULUM_QUESTIONS_BANK_EN[lesson.id]?.length) {
+        resultQuestions.push(...CURRICULUM_QUESTIONS_BANK_EN[lesson.id]);
+      } else if (!isEnglish && CURRICULUM_QUESTIONS_BANK[lesson.id]?.length) {
         resultQuestions.push(...CURRICULUM_QUESTIONS_BANK[lesson.id]);
       } else {
-        const dynamicQuestions = this.generateQuestionsFromLesson(lesson);
+        const dynamicQuestions = this.generateQuestionsFromLesson(lesson, lang);
         resultQuestions.push(...dynamicQuestions);
       }
     }
 
     // Ensure we always have at least 4-6 rich questions for single lesson, or more for multiple
     if (resultQuestions.length < 4 && lessons[0]) {
-      const extraQuestions = this.generateQuestionsFromLesson(lessons[0]);
+      const extraQuestions = this.generateQuestionsFromLesson(lessons[0], lang);
       extraQuestions.forEach((eq) => {
         if (!resultQuestions.some((rq) => rq.id === eq.id || rq.question === eq.question)) {
           resultQuestions.push(eq);
@@ -513,106 +585,189 @@ export const lessonQuizService = {
   /**
    * Generates dynamic Gemini-style curriculum questions for ANY book lesson
    */
-  generateQuestionsFromLesson(lesson: BookLesson): QuizQuestion[] {
+  generateQuestionsFromLesson(lesson: BookLesson, lang: 'ar' | 'en' = 'ar'): QuizQuestion[] {
+    const isEnglish = lang === 'en';
     const list: QuizQuestion[] = [];
     const title = lesson.title;
     const pageNum = lesson.pageNumber;
-    const unitTitle = lesson.unitTitle || 'الوحدة الدراسية';
-    const summary = lesson.summary || `موضوعات وأنشطة ${title}`;
+    const unitTitle = lesson.unitTitle || (isEnglish ? 'Study Unit' : 'الوحدة الدراسية');
+    const summary = lesson.summary || (isEnglish ? `Core topics and activities of ${title}` : `موضوعات وأنشطة ${title}`);
 
     // 1. Generate questions based on key concepts if available
     if (lesson.keyConcepts && lesson.keyConcepts.length > 0) {
       lesson.keyConcepts.forEach((concept, idx) => {
         const parts = concept.split(':');
-        const header = parts[0]?.trim() || 'المفهوم الرئيسي';
+        const header = parts[0]?.trim() || (isEnglish ? 'Core Concept' : 'المفهوم الرئيسي');
         const detail = parts[1]?.trim() || concept;
 
         list.push({
           id: `${lesson.id}-concept-${idx + 1}`,
           lessonId: lesson.id,
           lessonTitle: lesson.title,
-          question: `في ضوء دراستك لموضوع (${header}) في هذا الدرس: ما هي العبارة المنهجية الصحيحة؟`,
-          options: [
-            detail,
-            `تتعارض هذه القاعدة مع المبادئ الأساسية لمقرر ${unitTitle}`,
-            `لا يرتبط مفهوم (${header}) بموضوعات هذا الدرس إطلاقاً`,
-            `تقتصر دراسة هذا المفهوم على مراحل متقدمة أخرى خارج المنهج`,
-          ],
+          question: isEnglish
+            ? `Based on your study of (${header}) in this lesson, which statement is accurate according to the curriculum?`
+            : `في ضوء دراستك لموضوع (${header}) في هذا الدرس: ما هي العبارة المنهجية الصحيحة؟`,
+          options: isEnglish
+            ? [
+                detail,
+                `This rule contradicts the fundamental principles of ${unitTitle}`,
+                `The concept of (${header}) is completely unrelated to this lesson`,
+                `This topic is only studied outside the scope of this curriculum`,
+              ]
+            : [
+                detail,
+                `تتعارض هذه القاعدة مع المبادئ الأساسية لمقرر ${unitTitle}`,
+                `لا يرتبط مفهوم (${header}) بموضوعات هذا الدرس إطلاقاً`,
+                `تقتصر دراسة هذا المفهوم على مراحل متقدمة أخرى خارج المنهج`,
+              ],
           correctIndex: 0,
-          explanation: `وفقاً للمنهاج الدراسي المعتمد: ${detail}`,
-          hint: `تذكر ما ورد في شرح الدرس حول موضوع (${header}) وموقعه في الصفحة ${pageNum}.`,
+          explanation: isEnglish
+            ? `According to the approved curriculum: ${detail}`
+            : `وفقاً للمنهاج الدراسي المعتمد: ${detail}`,
+          hint: isEnglish
+            ? `Recall what was explained in the lesson regarding (${header}) on Page ${pageNum}.`
+            : `تذكر ما ورد في شرح الدرس حول موضوع (${header}) وموقعه في الصفحة ${pageNum}.`,
           topic: header,
         });
       });
     }
 
     // 2. Add contextual pedagogical questions for this lesson
-    list.push(
-      {
-        id: `${lesson.id}-q-main-objective`,
-        lessonId: lesson.id,
-        lessonTitle: title,
-        question: `ما هو المحور الأساسي والهدف التعليمي الذي يركز عليه (${title})؟`,
-        options: [
-          summary,
-          'دراسة موضوعات تاريخية عامة لا تتضمن أي تطبيقات عملية أو أنشطة',
-          'حفظ المصطلحات اللاتينية فقط دون فهم المعنى العلمي والتطبيقي',
-          'قراءة نصوص تمهيدية دون حل أسئلة التقويم المرفقة',
-        ],
-        correctIndex: 0,
-        explanation: `يركز هذا الدرس بشكل رئيسي على: ${summary}`,
-        hint: `انظر إلى عنوان الدرس في الصفحة ${pageNum} ومفاهيم ${unitTitle}.`,
-        topic: 'أهداف الدرس',
-      },
-      {
-        id: `${lesson.id}-q-methodology`,
-        lessonId: lesson.id,
-        lessonTitle: title,
-        question: `عند حل أنشطة وتقويم (${title})، ما هي المنهجية المعتمدة للوصول للإجابة الصحيحة؟`,
-        options: [
-          'الاستدلال من القواعد والحقائق المنهجية الواردة بالدرس وتطبيق خطوات الحل بدقة',
-          'تخمين الإجابة عشوائياً دون مراجعة المعطيات أو القوانين',
-          'الاكتفاء بالحل الشفهي وتجاهل كتابة الخطوات والتعليلات العلمية',
-          'تخطي المسائل والأنشطة والتركيز على قراءة العناوين فقط',
-        ],
-        correctIndex: 0,
-        explanation: 'الفهم المنهجي وحل تمارين الدرس يعتمد على ربط المعطيات بالقواعد العلمية المستفادة وتطبيق خطوات الحل المنطقي.',
-        hint: 'التركيز على الفهم العميق للدرس والربط المنطقي للمعطيات.',
-        topic: 'مهارات الحل والتقويم',
-      },
-      {
-        id: `${lesson.id}-q-application`,
-        lessonId: lesson.id,
-        lessonTitle: title,
-        question: `ما الفائدة العلمية والتطبيقية من دراسة المفاهيم المقررة في (${title})؟`,
-        options: [
-          'بناء قاعدة معرفية راسخة تُمكن الطالب من التفوق في الاختبارات وربط المنهج بالواقع',
-          'مجرد ملء صفحات الكتاب دون أي تطبيق عملي في الحياة اليومية',
-          'إلغاء الحاجة لدراسة باقي وحدات المقرر الدراسي',
-          'تكرار نفس المفاهيم السابقة دون أي إضافة علمية جديدة',
-        ],
-        correctIndex: 0,
-        explanation: 'دراسة محاور الدرس تسهم في ترسيخ الفهم الأكاديمي وتطوير مهارات التفكير والاستنتاج لدى الطالب.',
-        hint: 'ربط المفاهيم النظرية بالتطبيقات العملية وحل الأسئلة المنهجية.',
-        topic: 'التطبيق العملي',
-      },
-      {
-        id: `${lesson.id}-q-review`,
-        lessonId: lesson.id,
-        lessonTitle: title,
-        question: `كيف يتحقق الطالب من استيعابه التام لجميع محاور (${title})؟`,
-        options: [
-          'بحل أسئلة التقويم الذاتي واختبارات جيمني التفاعلية ومراجعة الإجابات النموذجية',
-          'بقراءة الدرس مرة واحدة فقط دون حل أي تدريبات أو مراجعة',
-          'بالاعتماد على التخمين في الاختبارات دون فهم المادة العلمية',
-          'بمقارنة عدد الصفحات دون التدقيق في المفاهيم والقوانين',
-        ],
-        correctIndex: 0,
-        explanation: 'التقويم المستمر وحل الأسئلة التفاعلية يضمن تثبيت المعلومات واكتشاف أي نقاط تحتاج لمراجعة.',
-        hint: 'حل الأسئلة والتمارين ومقارنة النتيجة مع التغذية الراجعة لجيمني.',
-        topic: 'التقويم الذاتي',
-      }
-    );
+    if (isEnglish) {
+      list.push(
+        {
+          id: `${lesson.id}-q-main-objective`,
+          lessonId: lesson.id,
+          lessonTitle: title,
+          question: `What is the main focus and learning objective of (${title})?`,
+          options: [
+            summary,
+            'Studying general historical topics with no practical applications or exercises',
+            'Memorizing Latin terms only without understanding the scientific meaning',
+            'Reading introductory paragraphs without solving the attached assessment questions',
+          ],
+          correctIndex: 0,
+          explanation: `This lesson primarily focuses on: ${summary}`,
+          hint: `Look at the lesson title on Page ${pageNum} and the concepts of ${unitTitle}.`,
+          topic: 'Lesson Objectives',
+        },
+        {
+          id: `${lesson.id}-q-methodology`,
+          lessonId: lesson.id,
+          lessonTitle: title,
+          question: `When solving the activities and assessment of (${title}), what is the correct methodology to reach the accurate answer?`,
+          options: [
+            'Applying the curricular rules and facts from the lesson and following logical solution steps accurately',
+            'Guessing the answer randomly without reviewing given data or laws',
+            'Relying only on verbal answers and ignoring written steps and scientific justifications',
+            'Skipping exercises and focusing only on reading headings',
+          ],
+          correctIndex: 0,
+          explanation: 'Curricular mastery and solving lesson exercises depend on linking given data to scientific rules and applying logical steps.',
+          hint: 'Focus on deep comprehension of the lesson and logical connection of the given data.',
+          topic: 'Problem-Solving Skills',
+        },
+        {
+          id: `${lesson.id}-q-application`,
+          lessonId: lesson.id,
+          lessonTitle: title,
+          question: `What is the scientific and practical benefit of studying the concepts in (${title})?`,
+          options: [
+            'Building a solid knowledge foundation that enables exam excellence and connects the curriculum to real life',
+            'Merely filling textbook pages without any real-world application',
+            'Eliminating the need to study the remaining units of the course',
+            'Repeating previous concepts without adding any new scientific value',
+          ],
+          correctIndex: 0,
+          explanation: 'Studying the lesson themes consolidates academic understanding and develops critical thinking and deduction skills.',
+          hint: 'Connect theoretical concepts with practical applications and curriculum questions.',
+          topic: 'Practical Application',
+        },
+        {
+          id: `${lesson.id}-q-review`,
+          lessonId: lesson.id,
+          lessonTitle: title,
+          question: `How can a student verify complete mastery of all topics in (${title})?`,
+          options: [
+            'By solving self-assessment questions, interactive Gemini quizzes, and reviewing model answers',
+            'By reading the lesson only once without solving any exercises or reviewing',
+            'By relying on guesswork during exams without understanding the material',
+            'By counting pages without examining the concepts and formulas',
+          ],
+          correctIndex: 0,
+          explanation: 'Continuous assessment and interactive quizzes ensure knowledge retention and identify areas needing review.',
+          hint: 'Solve exercises and compare your result with the Gemini feedback.',
+          topic: 'Self-Assessment',
+        }
+      );
+    } else {
+      list.push(
+        {
+          id: `${lesson.id}-q-main-objective`,
+          lessonId: lesson.id,
+          lessonTitle: title,
+          question: `ما هو المحور الأساسي والهدف التعليمي الذي يركز عليه (${title})؟`,
+          options: [
+            summary,
+            'دراسة موضوعات تاريخية عامة لا تتضمن أي تطبيقات عملية أو أنشطة',
+            'حفظ المصطلحات اللاتينية فقط دون فهم المعنى العلمي والتطبيقي',
+            'قراءة نصوص تمهيدية دون حل أسئلة التقويم المرفقة',
+          ],
+          correctIndex: 0,
+          explanation: `يركز هذا الدرس بشكل رئيسي على: ${summary}`,
+          hint: `انظر إلى عنوان الدرس في الصفحة ${pageNum} ومفاهيم ${unitTitle}.`,
+          topic: 'أهداف الدرس',
+        },
+        {
+          id: `${lesson.id}-q-methodology`,
+          lessonId: lesson.id,
+          lessonTitle: title,
+          question: `عند حل أنشطة وتقويم (${title})، ما هي المنهجية المعتمدة للوصول للإجابة الصحيحة؟`,
+          options: [
+            'الاستدلال من القواعد والحقائق المنهجية الواردة بالدرس وتطبيق خطوات الحل بدقة',
+            'تخمين الإجابة عشوائياً دون مراجعة المعطيات أو القوانين',
+            'الاكتفاء بالحل الشفهي وتجاهل كتابة الخطوات والتعليلات العلمية',
+            'تخطي المسائل والأنشطة والتركيز على قراءة العناوين فقط',
+          ],
+          correctIndex: 0,
+          explanation: 'الفهم المنهجي وحل تمارين الدرس يعتمد على ربط المعطيات بالقواعد العلمية المستفادة وتطبيق خطوات الحل المنطقي.',
+          hint: 'التركيز على الفهم العميق للدرس والربط المنطقي للمعطيات.',
+          topic: 'مهارات الحل والتقويم',
+        },
+        {
+          id: `${lesson.id}-q-application`,
+          lessonId: lesson.id,
+          lessonTitle: title,
+          question: `ما الفائدة العلمية والتطبيقية من دراسة المفاهيم المقررة في (${title})؟`,
+          options: [
+            'بناء قاعدة معرفية راسخة تُمكن الطالب من التفوق في الاختبارات وربط المنهج بالواقع',
+            'مجرد ملء صفحات الكتاب دون أي تطبيق عملي في الحياة اليومية',
+            'إلغاء الحاجة لدراسة باقي وحدات المقرر الدراسي',
+            'تكرار نفس المفاهيم السابقة دون أي إضافة علمية جديدة',
+          ],
+          correctIndex: 0,
+          explanation: 'دراسة محاور الدرس تسهم في ترسيخ الفهم الأكاديمي وتطوير مهارات التفكير والاستنتاج لدى الطالب.',
+          hint: 'ربط المفاهيم النظرية بالتطبيقات العملية وحل الأسئلة المنهجية.',
+          topic: 'التطبيق العملي',
+        },
+        {
+          id: `${lesson.id}-q-review`,
+          lessonId: lesson.id,
+          lessonTitle: title,
+          question: `كيف يتحقق الطالب من استيعابه التام لجميع محاور (${title})؟`,
+          options: [
+            'بحل أسئلة التقويم الذاتي واختبارات جيمني التفاعلية ومراجعة الإجابات النموذجية',
+            'بقراءة الدرس مرة واحدة فقط دون حل أي تدريبات أو مراجعة',
+            'بالاعتماد على التخمين في الاختبارات دون فهم المادة العلمية',
+            'بمقارنة عدد الصفحات دون التدقيق في المفاهيم والقوانين',
+          ],
+          correctIndex: 0,
+          explanation: 'التقويم المستمر وحل الأسئلة التفاعلية يضمن تثبيت المعلومات واكتشاف أي نقاط تحتاج لمراجعة.',
+          hint: 'حل الأسئلة والتمارين ومقارنة النتيجة مع التغذية الراجعة لجيمني.',
+          topic: 'التقويم الذاتي',
+        }
+      );
+    }
 
     return list;
   },
@@ -622,8 +777,10 @@ export const lessonQuizService = {
    */
   evaluateQuiz(
     questions: QuizQuestion[],
-    selectedAnswers: Record<string, number>
+    selectedAnswers: Record<string, number>,
+    lang: 'ar' | 'en' = 'ar'
   ): QuizResult {
+    const isEnglish = lang === 'en';
     let correctCount = 0;
     const details: QuizResult['answers'] = [];
 
@@ -635,7 +792,8 @@ export const lessonQuizService = {
       details.push({
         questionId: q.id,
         question: q.question,
-        selectedOption: selected !== undefined ? q.options[selected] : 'لم تتم الإجابة',
+        selectedOption:
+          selected !== undefined ? q.options[selected] : isEnglish ? 'Unanswered' : 'لم تتم الإجابة',
         correctOption: q.options[q.correctIndex],
         isCorrect,
         explanation: q.explanation,
@@ -646,31 +804,36 @@ export const lessonQuizService = {
     const total = questions.length || 1;
     const scorePercent = Math.round((correctCount / total) * 100);
 
-    let gradeLabel = 'ممتاز! إتقان تام للمنهج 🏆';
+    let gradeLabel = isEnglish ? 'Excellent! Complete Mastery 🏆' : 'ممتاز! إتقان تام للمنهج 🏆';
     let gradeBadge: QuizResult['gradeBadge'] = 'excellent';
-    let geminiFeedback =
-      'أداء رائع ومبهر! لقد استوعبت حقائق المنهج والمفاهيم الأساسية بشكل متقن جداً، وأنت جاهز تماماً للاختبارات النهائية.';
+    let geminiFeedback = isEnglish
+      ? 'Outstanding performance! You have mastered the core curriculum facts and concepts and are well-prepared for final exams.'
+      : 'أداء رائع ومبهر! لقد استوعبت حقائق المنهج والمفاهيم الأساسية بشكل متقن جداً، وأنت جاهز تماماً للاختبارات النهائية.';
 
     if (scorePercent >= 90) {
-      gradeLabel = 'ممتاز! استيعاب استثنائي للمنهج 🏆';
+      gradeLabel = isEnglish ? 'Excellent! Exceptional Mastery 🏆' : 'ممتاز! استيعاب استثنائي للمنهج 🏆';
       gradeBadge = 'excellent';
-      geminiFeedback =
-        'مستوى رفيع ومتقن! إجاباتك دقيقة وتطابق المعايير المنهجية المعتمدة بنجاح تام.';
+      geminiFeedback = isEnglish
+        ? 'High-level mastery! Your answers are accurate and align with the approved curriculum standards.'
+        : 'مستوى رفيع ومتقن! إجاباتك دقيقة وتطابق المعايير المنهجية المعتمدة بنجاح تام.';
     } else if (scorePercent >= 75) {
-      gradeLabel = 'جيد جداً! استيعاب قوي 🌟';
+      gradeLabel = isEnglish ? 'Very Good! Strong Understanding 🌟' : 'جيد جداً! استيعاب قوي 🌟';
       gradeBadge = 'very_good';
-      geminiFeedback =
-        'أحسنت! إجاباتك تظهر فهماً واسعاً لأغلب محاور الدرس، مع وجود فرصة لتعزيز التفاصيل الصغيرة في الأسئلة التي لم توفق فيها.';
+      geminiFeedback = isEnglish
+        ? 'Well done! Your answers show strong comprehension of most lesson topics, with minor details to review.'
+        : 'أحسنت! إجاباتك تظهر فهماً واسعاً لأغلب محاور الدرس، مع وجود فرصة لتعزيز التفاصيل الصغيرة في الأسئلة التي لم توفق فيها.';
     } else if (scorePercent >= 50) {
-      gradeLabel = 'جيد - يُنصح بمراجعة بعض النقاط 📖';
+      gradeLabel = isEnglish ? 'Good — Review Recommended 📖' : 'جيد - يُنصح بمراجعة بعض النقاط 📖';
       gradeBadge = 'good';
-      geminiFeedback =
-        'محاولة طيبة، لديك أساس جيد للموضوع ولكن بعض المفاهيم الدقيقة تحتاج لمراجعة ورقة الدرس مرة أخرى لضمان الدرجة الكاملة.';
+      geminiFeedback = isEnglish
+        ? 'Good attempt! You have a solid foundation, but some specific concepts need another review of the lesson pages.'
+        : 'محاولة طيبة، لديك أساس جيد للموضوع ولكن بعض المفاهيم الدقيقة تحتاج لمراجعة ورقة الدرس مرة أخرى لضمان الدرجة الكاملة.';
     } else {
-      gradeLabel = 'بحاجة لمراجعة الدرس وإعادة المحاولة 💡';
+      gradeLabel = isEnglish ? 'Needs Lesson Review & Retry 💡' : 'بحاجة لمراجعة الدرس وإعادة المحاولة 💡';
       gradeBadge = 'needs_review';
-      geminiFeedback =
-        'لا تقلق! التعلم يحتاج إلى التكرار. راجع صفحات الدرس في الكتاب بتركيز ثم أعد الاختبار لترسخ المعلومات في ذهنك.';
+      geminiFeedback = isEnglish
+        ? 'Do not worry! Learning takes repetition. Review the lesson pages carefully and retake the quiz to reinforce your knowledge.'
+        : 'لا تقلق! التعلم يحتاج إلى التكرار. راجع صفحات الدرس في الكتاب بتركيز ثم أعد الاختبار لترسخ المعلومات في ذهنك.';
     }
 
     return {

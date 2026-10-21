@@ -39,8 +39,8 @@ export type SupportedAITool =
   | 'explainImage';
 
 // حدود الجلسة وحماية إعادة المحاولة
-const MAX_REQUESTS_PER_SESSION = 40;
-const MAX_CONSECUTIVE_RETRIES = 3;
+const MAX_REQUESTS_PER_SESSION = 100;
+const MAX_CONSECUTIVE_RETRIES = 15;
 
 class AIGatewayService {
   private sessionRequestCount: number = 0;
@@ -54,14 +54,17 @@ class AIGatewayService {
     params: AIGatewayRequest,
     signal?: AbortSignal
   ): Promise<AIGatewayResponse> {
+    const isEn = params.language === 'en';
+
     // 1. فحص الحد الأقصى لعدد الطلبات أثناء الجلسة
     if (this.sessionRequestCount >= MAX_REQUESTS_PER_SESSION) {
       return {
         success: false,
         text: '',
         isGeminiPowered: false,
-        errorMessage:
-          'تم بلوغ الحد الأقصى لطلبات المساعد في هذه الجلسة (40 طلبًا). يمكنك متابعة قراءة الكتاب بحرية.',
+        errorMessage: isEn
+          ? 'Session request limit reached. You can continue reading freely.'
+          : 'تم بلوغ الحد الأقصى لطلبات المساعد في هذه الجلسة. يمكنك متابعة قراءة الكتاب بحرية.',
         canRetry: false,
       };
     }
@@ -72,8 +75,9 @@ class AIGatewayService {
         success: false,
         text: '',
         isGeminiPowered: false,
-        errorMessage:
-          'تم استنفاد محاولات إعادة الاتصال (3 محاولات متتالية). يرجى الانتظار قليلاً أو الاعتماد على الشرح المحلي.',
+        errorMessage: isEn
+          ? 'Connection retries exhausted. Using local educational explanation.'
+          : 'تم استنفاد محاولات إعادة الاتصال. يرجى الانتظار قليلاً أو الاعتماد على الشرح المحلي.',
         canRetry: false,
       };
     }
