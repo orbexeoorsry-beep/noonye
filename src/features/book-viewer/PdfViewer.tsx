@@ -613,11 +613,9 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
     }
   }, []);
 
-  const handleActionClick = useCallback((action: SelectionActionType, pNum: number) => {
-    setActiveSelectionPage(pNum);
-    handleSelectionAction(action, pNum);
-  }, [handleSelectionAction]);
-
+  const handleActionClick = useCallback((_action: SelectionActionType, _pNum: number) => {
+    // Assistant actions are intentionally disabled by the P0 hotfix.
+  }, []);
   const handleSetCanvasRef = useCallback((pNum: number, canvas: HTMLCanvasElement | null) => {
     if (canvas) {
       canvasMapRef.current.set(pNum, canvas);
@@ -627,35 +625,8 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
   }, []);
 
   const handleOpenNoonTools = () => {
-    if (!selection) {
-      const autoSelection: SelectionRegion = {
-        xPct: 4,
-        yPct: 6,
-        widthPct: 92,
-        heightPct: 88,
-        pageNumber: currentPage,
-        endPageNumber: currentPage,
-      };
-      setIsSelectionModeEnabled(true);
-      setActiveSelectionPage(currentPage);
-      setSelection(autoSelection);
-      const crop = getSelectedCropBase64(autoSelection, currentPage);
-      if (crop) {
-        setSelectedImage(crop);
-      } else if (pdfDoc) {
-        pdfService
-          .renderPageToDataUrl(pdfDoc, currentPage, autoSelection, 1400)
-          .then((url) => {
-            if (url) setSelectedImage(url);
-          });
-      }
-      setIsSelectionPanelOpen(true);
-      setSelectionActionNonce((n) => n + 1);
-      return;
-    }
-    setIsSelectionPanelOpen(true);
+    // Assistant entry point is intentionally disabled by the P0 hotfix.
   };
-
   // Zoom Operations
   const handleZoomIn = () => {
     setScale((prev) => Math.min(2.5, +(prev + 0.15).toFixed(2)));
@@ -841,6 +812,9 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
             <button
               type="button"
               onClick={handleOpenNoonTools}
+              disabled
+              aria-disabled="true"
+              title="Assistant temporarily unavailable"
               className={`min-h-[44px] px-3.5 sm:px-4 rounded-xl flex items-center gap-1.5 sm:gap-2 text-xs font-bold transition-all shadow-xs active:scale-[0.98] motion-reduce:transform-none focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-indigo-400 ${
                 isSelectionPanelOpen
                   ? 'bg-indigo-700 text-white ring-2 ring-indigo-400'
