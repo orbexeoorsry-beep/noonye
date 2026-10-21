@@ -1,0 +1,13 @@
+{
+  "unauthenticated": 401,
+  "capabilitySession": 200,
+  "noClientKey": true,
+  "badOrigin": 403,
+  "customDataRejected": 400,
+  "geminiHTTP": 200,
+  "geminiSuccess": true,
+  "providerStatus": null,
+  "model": "models/gemini-3.5-flash-lite",
+  "text": "1. اطرح 3 من الطرفين لتصبح المعادلة: 2x = 8.\n2. اقسم الطرفين على 2 لتجد قيمة المتغير: x = 4.\n3. النتيجة النهائية هي x = 4.",
+  "message": ""
+}

@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f7f8fa">
+  <title>نون — مختبر Gemini الخاص</title>
+  <style>
+    :root{color-scheme:light;--ink:#17212b;--muted:#667483;--line:#e2e7eb;--paper:#fff;--bg:#f5f7f8;--green:#087f5b;--green-dark:#06684b;--warning:#fff7e6;--warning-line:#efcf83;--red:#a33b32}
+    *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,"Segoe UI",Tahoma,Arial,sans-serif;line-height:1.65}.wrap{width:min(100% - 32px,760px);margin:0 auto;padding:36px 0 48px}.brand{font-weight:800;letter-spacing:.02em;color:var(--green);font-size:1.05rem}.brand span{color:var(--ink);font-weight:600}.intro{margin:18px 0 24px}.intro h1{font-size:clamp(1.65rem,5vw,2.2rem);line-height:1.3;margin:0 0 8px}.intro p{margin:0;color:var(--muted)}.warning{background:var(--warning);border:1px solid var(--warning-line);border-radius:12px;padding:14px 16px;margin:0 0 22px}.warning strong{display:block;margin-bottom:3px}.warning p{margin:0;font-size:.94rem}.card{background:var(--paper);border:1px solid var(--line);border-radius:16px;padding:clamp(18px,4vw,26px);box-shadow:0 8px 28px #17212b08}.field{margin-bottom:19px}label{display:block;font-weight:700;margin-bottom:7px}select{width:100%;min-height:48px;border:1px solid #cbd4da;border-radius:9px;background:#fff;color:var(--ink);font:inherit;padding:9px 12px}select:focus,button:focus-visible{outline:3px solid #087f5b45;outline-offset:2px}.sample-note{border:1px solid var(--line);border-radius:10px;padding:13px 14px;background:#fafbfc}.sample-note .sample-name{font-weight:700;margin-bottom:4px}.sample-note p{margin:0;color:#485662}.sample-note .tag{font-size:.8rem;color:var(--muted);margin-top:8px}.actions{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-top:22px}button{font:inherit;font-weight:700;border:0;border-radius:9px;background:var(--green);color:#fff;padding:11px 19px;min-height:48px;cursor:pointer}button:hover:not(:disabled){background:var(--green-dark)}button:disabled{opacity:.58;cursor:wait}.status{font-size:.93rem;color:var(--muted)}.status.error{color:var(--red)}.status.success{color:var(--green-dark);font-weight:700}.result{margin-top:24px;border-top:1px solid var(--line);padding-top:18px}.result h2{font-size:1.05rem;margin:0 0 9px}.result-text{white-space:pre-wrap;overflow-wrap:anywhere;background:#f7f9fa;border:1px solid var(--line);border-radius:10px;padding:14px;min-height:52px}.result-text:empty{display:none}.foot{color:var(--muted);font-size:.84rem;margin:18px 2px 0}@media(max-width:480px){.wrap{width:min(100% - 24px,760px);padding-top:24px}.actions{align-items:stretch;flex-direction:column;gap:8px}button{width:100%}}
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <div class="brand" aria-label="نون"><span>نون</span> / Gemini Lab</div>
+    <header class="intro">
+      <h1>مختبر Gemini الخاص</h1>
+      <p>اختبر أدوات نون على عينات تعليمية ثابتة.</p>
+    </header>
+    <aside class="warning" role="note" aria-label="تحذير مهم">
+      <strong>بيئة اختبار خاصة — بيانات اصطناعية فقط</strong>
+      <p>ليست بيئة إنتاج ولا مراجعة إصدار. لا تدخل أي مفتاح أو بيانات شخصية. لا يوجد رفع ملفات.</p>
+    </aside>
+    <section class="card" aria-label="اختبار أداة نون">
+      <div class="field">
+        <label for="tool">الأداة</label>
+        <select id="tool" name="tool">
+          <option value="explain">اشرح</option>
+          <option value="simplify">بسّط</option>
+          <option value="hint">تلميح</option>
+          <option value="quiz">اختبرني</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="sample">العينة</label>
+        <select id="sample" name="sample">
+          <option value="membrane">انتقال الماء عبر غشاء شبه منفذ</option>
+          <option value="math">حل المعادلة 2x+3=11</option>
+        </select>
+      </div>
+      <div class="sample-note" aria-live="polite">
+        <div class="sample-name" id="sample-title">انتقال الماء عبر غشاء شبه منفذ</div>
+        <p id="sample-description">يتحدث المثال عن انتقال الماء عبر غشاء شبه منفذ من تركيز المذاب الأقل إلى تركيز المذاب الأعلى.</p>
+        <div class="tag">عينة ثابتة — لا يُرسل نص حر</div>
+      </div>
+      <div class="actions">
+        <button id="test-button" type="button">اختبار الميزة</button>
+        <div id="status" class="status" role="status" aria-live="polite">جاهز للاختبار</div>
+      </div>
+      <section class="result" aria-labelledby="result-heading">
+        <h2 id="result-heading">النتيجة</h2>
+        <div id="result-text" class="result-text" aria-live="polite"></div>
+      </section>
+    </section>
+    <p class="foot">يُرسل الاختبار إلى نقطة النهاية المحلية المخصصة فقط. لا تُدخل معلومات حساسة.</p>
+  </main>
+  <script>
+    'use strict';
+    const samples = Object.freeze({
+      membrane: Object.freeze({label:'انتقال الماء عبر غشاء شبه منفذ', text:'يتحدث المثال عن انتقال الماء عبر غشاء شبه منفذ من تركيز المذاب الأقل إلى تركيز المذاب الأعلى.'}),
+      math: Object.freeze({label:'حل المعادلة 2x+3=11', text:'2x+3=11'})
+    });
+    const toolSelect = document.getElementById('tool');
+    const sampleSelect = document.getElementById('sample');
+    const button = document.getElementById('test-button');
+    const status = document.getElementById('status');
+    const resultText = document.getElementById('result-text');
+    function updateSample(){const item=samples[sampleSelect.value];document.getElementById('sample-title').textContent=item.label;document.getElementById('sample-description').textContent=item.text;}
+    sampleSelect.addEventListener('change',updateSample);
+    button.addEventListener('click', async () => {
+      button.disabled = true;
+      resultText.textContent = '';
+      status.className = 'status';
+      status.textContent = 'جارٍ اختبار الميزة…';
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 45000);
+      try {
+        const response = await fetch('/api/test', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({tool: toolSelect.value, sample: sampleSelect.value}),
+          signal: controller.signal
+        });
+        if (!response.ok) throw new Error(`فشل الطلب: HTTP ${response.status}${response.statusText ? ` — ${response.statusText}` : ''}`);
+        let data;
+        try { data = await response.json(); } catch (_) { throw new Error('فشل الطلب: استجابة الخادم ليست JSON صالحًا.'); }
+        if (!data || data.success !== true) throw new Error(data && typeof data.message === 'string' && data.message ? `فشل الاختبار: ${data.message}` : 'فشل الاختبار: لم يؤكد الخادم نجاح الطلب.');
+        status.className = 'status success';
+        status.textContent = 'تم الاتصال بـ Gemini';
+        resultText.textContent = typeof data.text === 'string' ? data.text : '';
+      } catch (error) {
+        status.className = 'status error';
+        if (error && error.name === 'AbortError') status.textContent = 'فشل الطلب: انتهت المهلة بعد 45 ثانية.';
+        else status.textContent = error instanceof TypeError ? 'فشل الطلب: تعذر الاتصال بنقطة الاختبار.' : (error && error.message ? error.message : 'فشل الطلب: حدث خطأ غير متوقع.');
+      } finally {
+        clearTimeout(timer);
+        button.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
