@@ -3,6 +3,7 @@ import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
+import { mountAdminAiBoundary } from './server/security/admin-ai-boundary';
 
 dotenv.config();
 
@@ -15,6 +16,9 @@ const AI_DISABLED_MESSAGE = 'خدمات الذكاء الاصطناعي معطل
 async function startServer() {
   const app = express();
   const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+
+  // No key-entry API exists until real auth, secret storage and eligibility are approved.
+  mountAdminAiBoundary(app);
 
   // Body parser for JSON
   app.use(express.json({ limit: '5mb' }));
