@@ -441,9 +441,10 @@ ${toolInstruction}
 
   // Development vs Production
   if (process.env.NODE_ENV === 'production') {
-    app.use(express.static(path.resolve(__dirname, 'dist')));
+    const publicDir = path.resolve(__dirname, path.basename(__dirname) === 'dist' ? '.' : 'dist');
+    app.use(express.static(publicDir));
     app.get('*', (_req: Request, res: Response) => {
-      res.sendFile(path.resolve(__dirname, 'dist', 'index.html'));
+      res.sendFile(path.resolve(publicDir, 'index.html'));
     });
   } else {
     // Mount Vite middlewares in development
