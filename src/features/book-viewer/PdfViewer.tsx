@@ -2,12 +2,10 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Book, InteractiveElement, UserNote } from '../../types';
 import { useI18n } from '../../i18n';
 import { pdfService, RenderResult } from '../../services/pdfService';
-import { localDocumentStore } from '../../services/localDocumentStore';
-import { generateEducationalSamplePdf } from '../../services/samplePdfGenerator';
+import { localDocumentStore, LocalDocumentError, localDocumentErrorMessage } from '../../services/localDocumentStore';
+import { loadBookDocumentData } from './document-source';
 import { bookLessonsService, BookLesson } from '../../services/bookLessonsService';
-import { LessonsBar } from './LessonsBar';
-import { LessonQuizModal } from './LessonQuizModal';
-import { LessonSummaryModal } from './LessonSummaryModal';
+import { PdfStudyPanel } from '../pdf-study/PdfStudyPanel';
 import { PdfPageView } from './PdfPageView';
 import { NotesDrawer } from './NotesDrawer';
 import { NoonToolsPanel } from '../ai-assistant/NoonToolsPanel';
@@ -37,8 +35,11 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
   onQuizCompleted,
 }) => {
   const { t, format, isRTL } = useI18n();
+  const localeRef = useRef({ t, isRTL });
+  localeRef.current = { t, isRTL };
   const containerRef = useRef<HTMLDivElement>(null);
   const panContainerRef = useRef<HTMLDivElement>(null);
+  const initialPageRef = useRef(book.currentPage || 1);
   const canvasMapRef = useRef<Map<number, HTMLCanvasElement>>(new Map());
 
   // PDF Document & Page State
@@ -54,6 +55,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
   // UI States
   const [isLoadingDoc, setIsLoadingDoc] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [positionSaveError, setPositionSaveError] = useState<string | null>(null);
   const [pageJumpInput, setPageJumpInput] = useState<string>('');
   const [pageJumpError, setPageJumpError] = useState<string | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -61,10 +63,11 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
   const [isAiToolsOpen, setIsAiToolsOpen] = useState(false);
   const [isLessonQuizOpen, setIsLessonQuizOpen] = useState(false);
   const [isSummaryOpen, setIsSummaryOpen] = useState(false);
+  const [isStudyOpen, setIsStudyOpen] = useState(false);
   const [selectedLessonIds, setSelectedLessonIds] = useState<string[]>([]);
   const [quizTargetLessons, setQuizTargetLessons] = useState<BookLesson[]>([]);
   const [summaryTargetLessons, setSummaryTargetLessons] = useState<BookLesson[]>([]);
-  const [isOverlayEnabled, setIsOverlayEnabled] = useState(true);
+  const [isOverlayEnabled, setIsOverlayEnabled] = useState(false);
   const [selectedElement, setSelectedElement] = useState<InteractiveElement | null>(null);
   const [notes, setNotes] = useState<UserNote[]>([]);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -212,25 +215,16 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
   // Load PDF Document & extract structured curriculum lessons
   const loadPdf = useCallback(async () => {
     setIsLoadingDoc(true);
+    setIsStudyOpen(false);
     setLoadError(null);
+    setPdfDoc(null);
+    setLessons([]);
+    setActiveLesson(null);
 
     const currentBook = bookRef.current;
+    const { t, isRTL } = localeRef.current;
     try {
-      let data: ArrayBuffer | Uint8Array | null = null;
-
-      if (currentBook.source === 'local') {
-        // 1. Load binary data strictly from IndexedDB for local user books
-        data = await localDocumentStore.getDocumentData(currentBook.id);
-        if (!data) {
-          // Fallback if binary was not found
-          const generated = generateEducationalSamplePdf();
-          data = generated.buffer as ArrayBuffer;
-        }
-      } else {
-        // 2. Admin books: Loaded directly from demo memory/generator without polluting IndexedDB LocalDocumentStore
-        const generated = generateEducationalSamplePdf();
-        data = generated.buffer as ArrayBuffer;
-      }
+      const data = await loadBookDocumentData(currentBook);
 
       if (!data || data.byteLength === 0) {
         throw new Error(t.viewer.invalidFileError);
@@ -246,18 +240,20 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
 
       // Restore saved page
       const initialPage = Math.min(Math.max(1, currentBook.currentPage || 1), doc.numPages);
+      initialPageRef.current = initialPage;
       setCurrentPage(initialPage);
       setActiveSelectionPage(initialPage);
 
-      // Extract Book Lessons (from curriculum database, outline, or table of contents)
-      const extractedLessons = await bookLessonsService.extractLessonsFromBook(currentBook, doc);
-      setLessons(extractedLessons);
-      const initialLesson = bookLessonsService.findLessonForPage(extractedLessons, initialPage);
-      setActiveLesson(initialLesson);
+      // Lessons are explicitly selected from this PDF in PdfStudyPanel.
+      // Never infer curriculum facts or page ranges from the file name.
     } catch (err: unknown) {
       console.error('Failed to load PDF', err);
       const errMsg = err instanceof Error ? err.message : String(err);
-      if (errMsg.includes('Invalid PDF') || errMsg.includes('corrupted')) {
+      if (err instanceof Error && err.name === 'PasswordException') {
+        setLoadError(t.pdfStudy.passwordProtected);
+      } else if (err instanceof LocalDocumentError) {
+        setLoadError(localDocumentErrorMessage(err, isRTL));
+      } else if (errMsg.includes('Invalid PDF') || errMsg.includes('corrupted')) {
         setLoadError(t.viewer.invalidFileError);
       } else if (errMsg.includes('large') || errMsg.includes('memory')) {
         setLoadError(t.viewer.fileTooLargeError);
@@ -267,7 +263,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
     } finally {
       setIsLoadingDoc(false);
     }
-  }, [book.id, t.viewer.invalidFileError, t.viewer.fileTooLargeError]);
+  }, [book.id]);
 
   useEffect(() => {
     loadPdf();
@@ -332,13 +328,20 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
     if (currentPage > 0) {
       if (lastSavedPageRef.current !== currentPage) {
         lastSavedPageRef.current = currentPage;
-        localDocumentStore.saveLastPage(book.id, currentPage);
+        if (book.source === 'local') {
+          localDocumentStore.saveLastPage(book.id, currentPage).then(
+            () => setPositionSaveError(null),
+            (error: unknown) => setPositionSaveError(localDocumentErrorMessage(
+              error instanceof LocalDocumentError ? error : new LocalDocumentError('save'), isRTL
+            ))
+          );
+        }
         onUpdatePageNumber(book.id, currentPage);
       }
       const pageNotes = storageService.getNotes(book.id, currentPage);
       setNotes(pageNotes);
     }
-  }, [book.id, currentPage, onUpdatePageNumber]);
+  }, [book.id, book.source, currentPage, onUpdatePageNumber, isRTL]);
 
   // Clean up toast timeout on unmount
   useEffect(() => {
@@ -355,9 +358,22 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
     setCurrentPage(target);
     const element = document.getElementById(`page-container-${target}`);
     if (element) {
-      element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      const pane = panContainerRef.current;
+      if (pane) pane.scrollTo({ top: pane.scrollTop + element.getBoundingClientRect().top - pane.getBoundingClientRect().top, behavior: 'smooth' });
     }
   }, [totalPages]);
+
+  // Restore the visible PDF page, not just its number in the navigation badge.
+  useEffect(() => {
+    if (!pdfDoc) return;
+    const frame = requestAnimationFrame(() => {
+      const target = Math.min(Math.max(1, initialPageRef.current), pdfDoc.numPages);
+      const element = document.getElementById(`page-container-${target}`);
+      const pane = panContainerRef.current;
+      if (element && pane) pane.scrollTo({ top: pane.scrollTop + element.getBoundingClientRect().top - pane.getBoundingClientRect().top, behavior: 'instant' });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [pdfDoc]);
 
   // Handle lesson selection from the horizontal LessonsBar
   const handleSelectLesson = useCallback((lesson: BookLesson) => {
@@ -469,11 +485,9 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
   };
 
   const handleFitWidth = () => {
-    if (!panContainerRef.current) return;
-    const containerWidth = panContainerRef.current.clientWidth - 40;
-    // Standard standard page width ~ 595px
-    const newScale = containerWidth / 595;
-    setScale(Math.max(0.5, Math.min(2.5, +newScale.toFixed(2))));
+    // Each page computes its own fit baseline from its actual PDF dimensions.
+    // Reset only the user zoom multiplier, including for citation pages of varying widths.
+    setScale(1.0);
   };
 
   // Page Switcher Navigation
@@ -552,16 +566,16 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
   return (
     <div
       ref={containerRef}
-      className="flex flex-col h-[calc(100vh-4rem)] bg-slate-100 overflow-hidden relative select-none"
+      className="flex flex-col flex-1 min-h-0 bg-slate-100 overflow-hidden relative select-none"
     >
       {/* ============================================================== */}
       {/* Top Application Header (Contains Controls & Horizontal Lessons) */}
       {/* ============================================================== */}
       <header className="shrink-0 z-20 w-full bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-2xs">
         {/* Row 1: Back, Title, Zoom/Fit Tools, Notes & Primary CTA */}
-        <div className="px-3 sm:px-6 py-2 flex items-center justify-between gap-2.5">
+        <div className="px-3 sm:px-6 py-2 flex flex-wrap items-center justify-between gap-2.5">
           {/* Back & Book Title */}
-          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0 w-full sm:w-auto">
             <IconButton
               name={isRTL ? 'arrowRight' : 'arrowLeft'}
               iconSize="sm"
@@ -589,7 +603,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
           </div>
 
           {/* Right Toolbar: Zoom controls, Fit width, Region selection, Notes & Noon Tools */}
-          <div className="flex items-center gap-1 sm:gap-1.5">
+          <div className="flex items-center justify-between gap-1 sm:gap-1.5 w-full sm:w-auto">
             {/* Zoom Controls */}
             <div className="flex items-center bg-slate-100/90 rounded-xl p-0.5 border border-slate-200/60">
               <IconButton
@@ -626,25 +640,6 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
               </IconButton>
             </div>
 
-            {/* Region Selection Tool Button */}
-            <IconButton
-              name="crop"
-              iconSize="sm"
-              variant={selection ? 'primary' : 'outline'}
-              label={selection ? t.selection.clearSelection : isRTL ? 'تحديد جزء' : 'Select'}
-              tooltip={selection ? t.selection.clearSelection : t.selection.dragToSelect}
-              onClick={() => {
-                if (selection) {
-                  setSelection(null);
-                }
-              }}
-              className="px-3 min-h-[44px]"
-            >
-              <span className="hidden lg:inline">
-                {selection ? t.selection.clearSelection : isRTL ? 'تحديد جزء' : 'Select'}
-              </span>
-            </IconButton>
-
             {/* Notes Button */}
             <IconButton
               name="notes"
@@ -674,7 +669,8 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
             {/* Primary Focal CTA: Noon Smart Tools */}
             <button
               type="button"
-              onClick={handleOpenNoonTools}
+              onClick={() => setIsStudyOpen(true)}
+              disabled={!pdfDoc || Boolean(loadError)}
               className={`min-h-[44px] px-3.5 sm:px-4 rounded-xl flex items-center gap-1.5 sm:gap-2 text-xs font-bold transition-all shadow-xs active:scale-[0.98] motion-reduce:transform-none focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-indigo-400 ${
                 isSelectionPanelOpen
                   ? 'bg-indigo-700 text-white ring-2 ring-indigo-400'
@@ -682,24 +678,14 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
               }`}
             >
               <AppIcon name="sparkles" size="sm" />
-              <span>{t.viewer.noonTools}</span>
+              <span>{t.pdfStudy.button}</span>
             </button>
           </div>
         </div>
 
         {/* Row 2: Horizontal Scrollable Lessons Bar */}
         <div className="px-3 sm:px-6 py-1.5 bg-slate-50/90 border-t border-slate-200/80 flex items-center justify-between gap-3">
-          {/* Lessons Horizontal Scrolling Bar */}
-          <LessonsBar
-            lessons={lessons}
-            activeLesson={activeLesson}
-            currentPage={currentPage}
-            selectedLessonIds={selectedLessonIds}
-            onToggleLessonSelect={handleToggleLessonSelect}
-            onSelectLesson={handleSelectLesson}
-            onStartQuiz={handleStartQuiz}
-            onStartSummary={handleStartSummary}
-          />
+          <p className="text-xs leading-6 text-slate-600">{book.source === 'admin' ? t.pdfStudy.demoNotice : t.pdfStudy.localNotice}</p>
         </div>
       </header>
 
@@ -808,13 +794,19 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
             </div>
           )}
 
+          {positionSaveError && (
+            <p role="alert" className="bg-amber-50 border border-amber-300 rounded-xl p-3 text-sm text-amber-900 mb-4">
+              {isRTL ? 'لم يتم حفظ موضع القراءة: ' : 'Reading position was not saved: '}{positionSaveError}
+            </p>
+          )}
+
           {/* Load Error Card */}
           {loadError ? (
-            <div className="bg-white border border-red-200 rounded-3xl p-8 max-w-md mx-auto text-center shadow-lg my-12">
+            <div role="alert" className="bg-white border border-red-200 rounded-3xl p-8 max-w-md mx-auto text-center shadow-lg my-12">
               <div className="w-14 h-14 rounded-2xl bg-red-50 text-red-600 flex items-center justify-center mx-auto mb-4">
                 <AppIcon name="alert" size="xl" />
               </div>
-              <h3 className="text-base font-bold text-slate-900 mb-2 font-display">تعذر قراءة ملف PDF</h3>
+              <h3 className="text-base font-bold text-slate-900 mb-2 font-display">{isRTL ? 'تعذر قراءة ملف PDF' : 'Could not open PDF'}</h3>
               <p className="text-xs text-slate-600 mb-6 leading-relaxed font-sans">{loadError}</p>
               <div className="flex items-center justify-center gap-3">
                 <button
@@ -823,14 +815,14 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
                   className="min-h-[44px] px-5 py-2 rounded-xl bg-slate-900 text-white font-bold text-xs hover:bg-slate-800 transition-colors flex items-center gap-2 active:scale-[0.98] motion-reduce:transform-none"
                 >
                   <AppIcon name="refresh" size="sm" />
-                  <span>إعادة المحاولة</span>
+                  <span>{t.actions.retry}</span>
                 </button>
                 <button
                   type="button"
                   onClick={onBackToLibrary}
                   className="min-h-[44px] px-4 py-2 rounded-xl border border-slate-300 text-slate-700 text-xs font-semibold hover:bg-slate-50 transition-colors active:scale-[0.98] motion-reduce:transform-none"
                 >
-                  العودة للمكتبة
+                  {t.actions.backToLibrary}
                 </button>
               </div>
             </div>
@@ -850,7 +842,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
                     onActionClick={handleActionClick}
                     selectedElementId={selectedElement?.id || null}
                     onSelectElement={handleSelectElement}
-                    isOverlayEnabled={isOverlayEnabled}
+                    isOverlayEnabled={false}
                     onPageIntersect={handlePageIntersect}
                     setCanvasRef={handleSetCanvasRef}
                   />
@@ -899,24 +891,8 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
         onQuizCompleted={onQuizCompleted}
       />
 
-      {/* Gemini Student Lesson Quiz Modal (Single Lesson or Multiple Lessons) */}
-      <LessonQuizModal
-        isOpen={isLessonQuizOpen}
-        onClose={() => setIsLessonQuizOpen(false)}
-        allLessons={lessons}
-        initialLesson={quizTargetLessons[0] || activeLesson}
-        onJumpToPage={(pNum) => scrollToPage(pNum)}
-        onQuizCompleted={onQuizCompleted}
-      />
-
-      {/* Gemini Student Lesson Summary Modal (Single Lesson or Multiple Lessons) */}
-      <LessonSummaryModal
-        isOpen={isSummaryOpen}
-        onClose={() => setIsSummaryOpen(false)}
-        selectedLessons={summaryTargetLessons}
-        bookTitle={book.title}
-      />
-
+      {pdfDoc && <PdfStudyPanel key={book.id} document={pdfDoc} bookId={book.id} isOpen={isStudyOpen}
+        onClose={() => setIsStudyOpen(false)} onPage={scrollToPage} />}
       {/* Delete Book Confirmation Dialog */}
       {showDeleteConfirm && (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">

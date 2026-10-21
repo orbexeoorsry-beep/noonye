@@ -12,8 +12,10 @@ import { Library } from './pages/Library';
 import { AddBook } from './pages/AddBook';
 import { BookViewerPage } from './pages/BookViewerPage';
 import { ProgressPage } from './pages/ProgressPage';
+import { useI18n } from './i18n';
 
 export default function App() {
+  const { t } = useI18n();
   const [activePage, setActivePage] = useState<ActivePage>('home');
   const [books, setBooks] = useState<Book[]>(() => storageService.getBooks());
   const [progress, setProgress] = useState<StudentProgress>(() => storageService.getProgress());
@@ -149,12 +151,15 @@ export default function App() {
   const activeBook = books.find((b) => b.id === activeBookId) || books[0] || INITIAL_ADMIN_BOOKS[0];
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#f7f8fc] text-slate-900 selection:bg-indigo-100 selection:text-indigo-900 font-sans">
+    <div className={`${activePage === 'viewer' ? 'h-dvh overflow-hidden' : 'min-h-screen'} flex flex-col bg-[#f7f8fc] text-slate-900 selection:bg-indigo-100 selection:text-indigo-900 font-sans`}>
+      <div className="shrink-0 bg-amber-50 border-b border-amber-200 text-amber-950 px-4 py-2 text-center text-xs leading-6" role="status">
+        {t.pdfStudy.previewNotice}
+      </div>
       {/* Top Header */}
       <Header activePage={activePage} onNavigate={handleNavigate} />
 
       {/* Main Content Area */}
-      <main className="flex-1 flex flex-col">
+      <main className="flex-1 min-h-0 flex flex-col">
         {activePage === 'home' && (
           <Home
             onNavigate={handleNavigate}

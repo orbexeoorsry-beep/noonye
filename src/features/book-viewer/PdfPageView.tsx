@@ -8,6 +8,8 @@ import {
   SelectionActionType,
 } from '../selection';
 import { InteractiveElement } from '../../types';
+import { calculatePdfFitScale } from './pdf-fit-scale';
+import { useI18n } from '../../i18n';
 
 interface PdfPageViewProps {
   doc: pdfjsLib.PDFDocumentProxy;
@@ -38,9 +40,11 @@ export const PdfPageView: React.FC<PdfPageViewProps> = ({
   onPageIntersect,
   setCanvasRef,
 }) => {
+  const { t, format } = useI18n();
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isRendered, setIsRendered] = useState(false);
+  const [renderError, setRenderError] = useState(false);
   const [dimensions, setDimensions] = useState<RenderResult>({
     width: 595,
     height: 842,
@@ -48,12 +52,23 @@ export const PdfPageView: React.FC<PdfPageViewProps> = ({
     originalHeight: 842,
   });
   const [isInViewport, setIsInViewport] = useState(false);
+  const [availableWidth, setAvailableWidth] = useState(0);
 
   const onPageIntersectRef = useRef(onPageIntersect);
   onPageIntersectRef.current = onPageIntersect;
 
   const setCanvasRefRef = useRef(setCanvasRef);
   setCanvasRefRef.current = setCanvasRef;
+
+  useEffect(() => {
+    const element = containerRef.current;
+    if (!element) return;
+    const measure = () => setAvailableWidth(element.clientWidth);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
 
   // IntersectionObserver to observe visibility and report active page
   useEffect(() => {
@@ -88,21 +103,33 @@ export const PdfPageView: React.FC<PdfPageViewProps> = ({
 
     const cancellationToken = { isCancelled: false };
     const canvas = canvasRef.current;
+    setRenderError(false);
 
     if (setCanvasRefRef.current) {
       setCanvasRefRef.current(pageNumber, canvas);
     }
 
-    pdfService
-      .renderPage(doc, pageNumber, canvas, scale, cancellationToken)
+    doc.getPage(pageNumber)
+      .then((page) => {
+        if (cancellationToken.isCancelled) return undefined;
+        const pageWidthAtOne = page.getViewport({ scale: 1 }).width;
+        return pdfService.renderPage(
+          doc,
+          pageNumber,
+          canvas,
+          calculatePdfFitScale(pageWidthAtOne, availableWidth, scale),
+          cancellationToken
+        );
+      })
       .then((dims) => {
-        if (!cancellationToken.isCancelled) {
+        if (dims && !cancellationToken.isCancelled) {
           setDimensions(dims);
           setIsRendered(true);
         }
       })
       .catch((err) => {
         if (!cancellationToken.isCancelled) {
+          setRenderError(true);
           console.warn(`Render notice on page ${pageNumber}:`, err);
         }
       });
@@ -110,19 +137,20 @@ export const PdfPageView: React.FC<PdfPageViewProps> = ({
     return () => {
       cancellationToken.isCancelled = true;
     };
-  }, [doc, pageNumber, scale, isInViewport]);
+  }, [doc, pageNumber, scale, isInViewport, availableWidth]);
 
   return (
     <div
       ref={containerRef}
       id={`page-container-${pageNumber}`}
       data-page-number={pageNumber}
-      className="relative flex flex-col items-center my-4 transition-all"
+      aria-busy={!isRendered && !renderError}
+      className="relative flex w-full flex-col items-center my-4 transition-all"
     >
       {/* Page Header / Number Badge */}
       <div className="w-full flex items-center justify-between px-3 py-1 mb-1 text-[11px] text-slate-400 font-mono select-none">
         <span className="bg-slate-200/70 text-slate-600 px-2 py-0.5 rounded-md font-semibold">
-          صفحة {pageNumber}
+          {format(t.pdfStudy.page, { page: pageNumber })}
         </span>
       </div>
 
@@ -136,19 +164,20 @@ export const PdfPageView: React.FC<PdfPageViewProps> = ({
         }}
       >
         {/* Placeholder skeleton while loading/rendering */}
-        {!isRendered && (
+        {!isRendered && !renderError && (
           <div className="absolute inset-0 bg-slate-50 flex items-center justify-center animate-pulse">
             <span className="text-xs text-slate-400 font-medium">
-              جارٍ تحميل صفحة {pageNumber}...
+              {format(t.pdfStudy.loadingPage, { page: pageNumber })}
             </span>
           </div>
         )}
 
+        {renderError && <p role="alert" className="absolute inset-0 bg-red-50 p-6 text-red-900 text-sm leading-7">{format(t.pdfStudy.renderError, { page: pageNumber })}</p>}
         {/* HTML5 Canvas */}
         <canvas ref={canvasRef} className="block w-full h-full" />
 
         {/* Smart Interaction Overlay Layer */}
-        {isRendered && (
+        {isRendered && isOverlayEnabled && (
           <PdfInteractionOverlay
             pageNumber={pageNumber}
             width={dimensions.width}
@@ -160,7 +189,7 @@ export const PdfPageView: React.FC<PdfPageViewProps> = ({
         )}
 
         {/* Region Selection Layer */}
-        {isRendered && (
+        {isRendered && isOverlayEnabled && (
           <PdfSelectionLayer
             pageNumber={pageNumber}
             pageWidth={dimensions.width}
@@ -168,7 +197,7 @@ export const PdfPageView: React.FC<PdfPageViewProps> = ({
             selection={isSelectionActive ? selection : null}
             onSelectionChange={(sel) => onSelectionChange(sel, pageNumber)}
             onActionClick={(action) => onActionClick(action, pageNumber)}
-            isEnabled={true}
+            isEnabled={isOverlayEnabled}
           />
         )}
       </div>

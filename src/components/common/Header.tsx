@@ -28,7 +28,7 @@ export const Header: React.FC<HeaderProps> = ({ activePage, onNavigate }) => {
 
   return (
     <>
-      <header className="sticky top-0 z-30 w-full border-b border-slate-200/80 bg-white/90 backdrop-blur-xl">
+      <header className="shrink-0 sticky top-0 z-30 w-full border-b border-slate-200/80 bg-white/90 backdrop-blur-xl">
         <div className="mx-auto flex min-h-16 max-w-7xl items-center justify-between gap-3 px-4 sm:px-6 lg:px-8">
           <button
             type="button"

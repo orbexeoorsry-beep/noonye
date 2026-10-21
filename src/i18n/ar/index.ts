@@ -8,9 +8,11 @@ import { guidedMath } from './guidedMath';
 import { scienceAnalysis } from './scienceAnalysis';
 import { errors } from './errors';
 import { settings } from './settings';
+import { pdfStudy } from './pdfStudy';
 import { TranslationDictionary } from '../types';
 
 export const ar: TranslationDictionary = {
+  pdfStudy,
   common,
   library,
   bookViewer,
@@ -65,19 +67,19 @@ export const ar: TranslationDictionary = {
     filterBy: 'تصفية',
   },
   home: {
-    heroKicker: 'تجربة قراءة أصيلة ومدعومة بالذكاء',
+    heroKicker: 'قراءة PDF ومراجعة موثّقة بالصفحات',
     heroTitle: 'كتابك كما هو، وفهمك أفضل',
     heroSubtitle:
-      'اقرأ صفحات كتابك المدرسي الحقيقي بنفس تنسيقه وترتيبه، واستعن بمساعد نون الذكي لتبسيط أي فقرة، وحل المسائل خطوة بخطوة، واختبار فهمك فورًا.',
+      'ارفع كتابك بصيغة PDF، وحدّد الدرس وصفحاته، ثم راجع مقتطفات نصه وأسئلة تدريب ذاتي مرتبطة بصفحات الملف. دون خدمات ذكاء اصطناعي أو درجات آلية.',
     ctaPrimary: 'ابدأ التعلم الآن',
     ctaSecondary: 'إضافة كتاب مدرسي',
     featureHighlightTitle: 'لماذا يحب الطلاب نون؟',
     feature1Title: 'صفحة الكتاب الأصلية',
     feature1Desc:
       'لا نعيد تشكيل النص ولا نشتت انتباهك؛ ترى الصفحة تمامًا كما طبعت في كتابك مع الرسومات والجداول.',
-    feature2Title: 'أدوات ذكية عند الطلب',
+    feature2Title: 'مراجعة من النص الحقيقي',
     feature2Desc:
-      'اضغط على أي فقرة أو مسألة أو رسم بياني لتحصل على شرح خطوة بخطوة وتلميحات واختبارات تفاعلية.',
+      'اختر نطاق الدرس للحصول على مقتطفات وأسئلة إكمال موثّقة. إذا تعذر استخراج النص، نوضح السبب دون اختلاق محتوى.',
     feature3Title: 'خصوصية وأمان على جهازك',
     feature3Desc:
       'كتبك وملاحظاتك تحفظ محليًا على هذا المتصفح دون الحاجة لحسابات معقدة أو بطاقات بنكية.',

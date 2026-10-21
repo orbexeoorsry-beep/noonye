@@ -8,9 +8,11 @@ import { guidedMath } from './guidedMath';
 import { scienceAnalysis } from './scienceAnalysis';
 import { errors } from './errors';
 import { settings } from './settings';
+import { pdfStudy } from './pdfStudy';
 import { TranslationDictionary } from '../types';
 
 export const en: TranslationDictionary = {
+  pdfStudy,
   common,
   library,
   bookViewer,
@@ -65,17 +67,17 @@ export const en: TranslationDictionary = {
     filterBy: 'Filter By',
   },
   home: {
-    heroKicker: 'Authentic reading backed by intelligence',
+    heroKicker: 'PDF reading with page-grounded review',
     heroTitle: 'Your textbook as is, your understanding better',
     heroSubtitle:
-      'Read your original textbook pages in their original format, assisted by Noon AI for step-by-step guidance, hints, and quizzes.',
+      'Upload a PDF, select lesson pages, and review extractive notes and self-practice questions with page references. No AI or automatic scores.',
     ctaPrimary: 'Start Learning Now',
     ctaSecondary: 'Add a Textbook',
     featureHighlightTitle: 'Why Students Love Noon',
     feature1Title: 'Original Book Layout',
     feature1Desc: 'We keep the page format identical to the printed book with all figures and tables.',
-    feature2Title: 'On-Demand Smart Tools',
-    feature2Desc: 'Tap on any paragraph, problem, or diagram for step-by-step guidance.',
+    feature2Title: 'Review from actual text',
+    feature2Desc: 'Select lesson pages for extractive notes and self-review questions. No AI or automatic scores.',
     feature3Title: 'Privacy on Your Device',
     feature3Desc: 'Books and notes are stored locally in your browser without complex sign-ups.',
     quickStats: {

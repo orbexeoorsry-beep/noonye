@@ -253,7 +253,10 @@ export interface SettingsTranslations {
   currentDirection: string;
 }
 
+export type PdfStudyTranslations = typeof import('./en/pdfStudy').pdfStudy;
+
 export interface TranslationDictionary {
+  pdfStudy: PdfStudyTranslations;
   common: CommonTranslations;
   library: LibraryTranslations;
   bookViewer: BookViewerTranslations;

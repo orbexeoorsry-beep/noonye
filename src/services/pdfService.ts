@@ -1,15 +1,9 @@
 import * as pdfjsLib from 'pdfjs-dist';
 
-// Configure PDF.js worker safely
-if (typeof window !== 'undefined') {
-  try {
-    // Primary worker path using standard matching cdnjs/unpkg for the installed version
-    const version = pdfjsLib.version || '4.0.379';
-    pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${version}/build/pdf.worker.min.mjs`;
-  } catch (e) {
-    console.warn('PDF.js worker initialization notice', e);
-  }
-}
+import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+
+// Bundle the matching worker with the application: no remote code or PDF upload.
+if (typeof window !== 'undefined') pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
 
 export interface PdfDocumentInfo {
   numPages: number;
@@ -29,9 +23,17 @@ export const pdfService = {
    */
   async loadDocument(source: ArrayBuffer | Uint8Array | string): Promise<pdfjsLib.PDFDocumentProxy> {
     const loadingTask = pdfjsLib.getDocument(
-      typeof source === 'string'
-        ? { url: source, cMapUrl: `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/cmaps/`, cMapPacked: true }
-        : { data: source, cMapUrl: `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/cmaps/`, cMapPacked: true }
+      {
+        ...(typeof source === 'string' ? { url: source } : { data: source }),
+        standardFontDataUrl: `${import.meta.env.BASE_URL}pdfjs/standard_fonts/`,
+        cMapUrl: `${import.meta.env.BASE_URL}pdfjs/cmaps/`,
+        cMapPacked: true,
+        wasmUrl: `${import.meta.env.BASE_URL}pdfjs/wasm/`,
+        useSystemFonts: false,
+        stopAtErrors: true,
+        // Internal glyph paths avoid missing glyphs in browser-converted PDF fonts.
+        disableFontFace: true,
+      }
     );
     return await loadingTask.promise;
   },

@@ -47,7 +47,7 @@ export const BookCard: React.FC<BookCardProps> = ({ book, onOpen, onDelete }) =>
             {book.source === 'admin' ? (
               <span className="text-indigo-700 bg-indigo-50/90 border border-indigo-100 px-2 py-0.5 rounded-md flex items-center gap-1 font-semibold text-[10px] font-sans">
                 <AppIcon name="sparkles" size="xs" className="text-indigo-600" />
-                <span>{t.library.noonBooksSection}</span>
+                <span>{isRTL ? 'نموذج تجريبي' : 'Demo sample'}</span>
               </span>
             ) : (
               <div className="flex items-center gap-1.5 font-sans">
@@ -80,12 +80,13 @@ export const BookCard: React.FC<BookCardProps> = ({ book, onOpen, onDelete }) =>
 
         {/* Short Summary */}
         <p className="text-xs sm:text-sm text-slate-500 line-clamp-2 leading-relaxed mb-4 font-sans">
-          {book.summary}
+          {book.source === 'admin' ? (isRTL ? 'ملف عرض مولّد من 3 صفحات، وليس الكتاب الدراسي الكامل. لا تمثل بياناته تقدمًا حقيقيًا.' : 'Generated 3-page demo, not the full textbook. Its metadata is not real progress.') : book.summary}
         </p>
       </div>
 
       {/* Bottom Progress & Action Section */}
       <div className="pt-3 border-t border-slate-100 mt-2 font-sans">
+        {book.source !== 'admin' && <>
         {/* Progress & Pages Info */}
         <div className="flex items-center justify-between text-xs text-slate-500 mb-2 tabular-nums">
           <span className="flex items-center gap-1">
@@ -98,7 +99,7 @@ export const BookCard: React.FC<BookCardProps> = ({ book, onOpen, onDelete }) =>
             </span>
           </span>
           <span className="font-semibold text-slate-700">
-            {format(t.library.progressPercent, { percent: book.progressPercent || 1 })}
+            {format(t.library.progressPercent, { percent: book.progressPercent || 0 })}
           </span>
         </div>
 
@@ -107,12 +108,13 @@ export const BookCard: React.FC<BookCardProps> = ({ book, onOpen, onDelete }) =>
           <div
             className="h-full rounded-full transition-all duration-300 motion-reduce:transition-none"
             style={{
-              width: `${Math.max(3, book.progressPercent || 1)}%`,
+              width: `${Math.max(0, book.progressPercent || 0)}%`,
               backgroundColor: book.accentColor || '#4338ca',
             }}
           />
         </div>
 
+        </>}
         {/* CTA Strip */}
         <div className="flex items-center justify-between pt-1">
           <span className="text-[11px] text-slate-400 flex items-center gap-1 font-sans">

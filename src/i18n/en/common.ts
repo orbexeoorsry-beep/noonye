@@ -29,7 +29,7 @@ export const common: CommonTranslations = {
   arabic: 'العربية',
   english: 'English',
   localPrivacyNotice: 'Private local storage on this browser',
-  safeForStudents: 'Safe for students and educators',
+  safeForStudents: 'Local review without AI',
 };
 
 export default common;

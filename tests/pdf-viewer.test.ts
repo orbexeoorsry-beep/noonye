@@ -12,7 +12,7 @@
  */
 
 import { generateEducationalSamplePdf } from '../src/services/samplePdfGenerator';
-import { localDocumentStore } from '../src/services/localDocumentStore';
+import { runLocalDocumentTests } from './local-documents.test';
 import { storageService } from '../src/services/storage';
 
 async function runTests() {
@@ -100,25 +100,11 @@ async function runTests() {
   const fitWidthScale = +(containerWidth / originalPageWidth).toFixed(2);
   assert(fitWidthScale === 0.63, `Calculates exact mobile fit width scale (${fitWidthScale})`);
 
-  // Test 6: Local Document Store & Last Page persistence
+  // Test 6: Actual IndexedDB persistence and explicit failure recovery.
   try {
-    const testDocId = 'test_book_' + Date.now();
-    const testData = generateEducationalSamplePdf().buffer as ArrayBuffer;
-
-    await localDocumentStore.saveDocument(testDocId, 'كتاب الأحياء التجريبي', testData.byteLength, testData, 3, 1);
-    const retrieved = await localDocumentStore.getDocumentData(testDocId);
-    assert(retrieved !== null && retrieved.byteLength === testData.byteLength, 'Successfully saved and retrieved PDF binary in LocalDocumentStore');
-
-    // Update last page
-    await localDocumentStore.updateLastPage(testDocId, 2);
-    assert(true, 'Successfully updated and persisted last read page (Page 2)');
-
-    // Delete document
-    await localDocumentStore.deleteDocument(testDocId);
-    const afterDelete = await localDocumentStore.getDocumentData(testDocId);
-    assert(afterDelete === null, 'Successfully deleted local PDF document and its stored data');
-  } catch (e) {
-    assert(false, `LocalDocumentStore test failed: ${e}`);
+    await runLocalDocumentTests(assert);
+  } catch (error) {
+    assert(false, `Native IndexedDB tests failed: ${error}`);
   }
 
   // Test 7: Region Selection & Zoom-Invariance calculations
@@ -503,6 +489,12 @@ async function runTests() {
   }
 
   console.log(`\n========================================`);
+  try {
+    await import('./progress-page.test');
+    assert(true, 'Progress page hides synthetic performance in Arabic and English');
+  } catch (error) {
+    assert(false, `Progress page honesty tests failed: ${error}`);
+  }
   console.log(`Test Results: ${passed} Passed, ${failed} Failed`);
   console.log(`========================================\n`);
 

@@ -1,9 +1,9 @@
 import React, { useState, useRef } from 'react';
 import { useI18n } from '../i18n';
 import { Book, ActivePage } from '../types';
-import { localDocumentStore } from '../services/local-document-store';
+import { localDocumentStore, LocalDocumentError, localDocumentErrorMessage } from '../services/local-document-store';
 import { LOCAL_STORE_CONFIG, formatFileSize } from '../services/local-document-store/config';
-import { generateEducationalSamplePdf } from '../services/samplePdfGenerator';
+import { inspectPdfUpload, PdfUploadError } from '../features/local-documents/services/pdf-upload';
 import { pdfService } from '../services/pdfService';
 import { AppIcon } from '../design-system';
 
@@ -53,16 +53,16 @@ export const AddBook: React.FC<AddBookProps> = ({
     try {
       // 2. Validate PDF format via PDF.js
       setProcessingProgress(45);
-      setProcessingStepText(t.addBook.processingSteps.extracting);
+      setProcessingStepText('جارٍ التحقق من بنية PDF وعدد صفحاته...');
 
-      const arrayBuffer = await fileBlob.arrayBuffer();
-      const pdfDoc = await pdfService.loadDocument(arrayBuffer);
+      const pdfDoc = await inspectPdfUpload(fileBlob, LOCAL_STORE_CONFIG.MAX_FILE_SIZE_BYTES, pdfService.loadDocument);
       const pageCount = pdfDoc.numPages;
+      await pdfDoc.loadingTask.destroy();
 
       setProcessingProgress(75);
-      setProcessingStepText(t.addBook.processingSteps.indexing);
+      setProcessingStepText('جارٍ حفظ PDF الأصلي على هذا المتصفح...');
 
-      const bookId = 'book_' + Date.now();
+      const bookId = 'book_' + crypto.randomUUID();
       const cleanTitle = fileName.replace(/\.pdf$/i, '');
 
       // 3. Store in IndexedDB with separated metadata & Blob
@@ -88,7 +88,7 @@ export const AddBook: React.FC<AddBookProps> = ({
         gradeLevel: 'المرحلة الدراسية',
         totalPages: savedMetadata.pageCount,
         currentPage: 1,
-        progressPercent: Math.round((1 / savedMetadata.pageCount) * 100),
+        progressPercent: 0,
         status: 'local',
         lastOpened: 'محلي',
         summary: `كتاب دراسي محفوظ محلياً على هذا الجهاز (${savedMetadata.pageCount} صفحة).`,
@@ -100,22 +100,26 @@ export const AddBook: React.FC<AddBookProps> = ({
         pages: [
           {
             pageNumber: 1,
-            chapterTitle: 'الفصل الأول',
-            lessonTitle: 'الصفحة الأولى من ملف PDF',
+            chapterTitle: '',
+            lessonTitle: 'صفحة PDF 1',
             elements: [],
           },
         ],
       };
 
       setProcessingProgress(100);
-      setProcessingStepText(t.addBook.processingSteps.indexing);
+      setProcessingStepText('جارٍ حفظ PDF الأصلي على هذا المتصفح...');
       setCreatedBook(newBook);
       onAddBook(newBook);
       setUploadState('success');
     } catch (err: unknown) {
       console.error('Failed to process PDF:', err);
       const errStr = err instanceof Error ? err.message : String(err);
-      if (errStr.includes('Invalid PDF') || errStr.includes('format')) {
+      if (err instanceof PdfUploadError) {
+        setErrorMessage(err.message);
+      } else if (err instanceof LocalDocumentError) {
+        setErrorMessage(localDocumentErrorMessage(err, isRTL));
+      } else if (errStr.includes('Invalid PDF') || errStr.includes('format')) {
         setErrorMessage(t.errors.invalidPdf);
       } else {
         setErrorMessage(t.errors.readingError);
@@ -153,13 +157,6 @@ export const AddBook: React.FC<AddBookProps> = ({
     await processAndSavePdf(file.name, file);
   };
 
-  const handleQuickPickSample = async (sampleTitle: string, subject: string) => {
-    const generated = generateEducationalSamplePdf();
-    const arrayBuf = generated.buffer as ArrayBuffer;
-    const blob = new Blob([arrayBuf], { type: 'application/pdf' });
-    await processAndSavePdf(sampleTitle, blob, subject);
-  };
-
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full">
       {/* Header */}
@@ -180,7 +177,8 @@ export const AddBook: React.FC<AddBookProps> = ({
             type="file"
             onChange={handleFileChange}
             accept=".pdf,application/pdf"
-            className="hidden"
+            aria-label="ملف PDF للرفع"
+            className="sr-only"
           />
 
           {/* Drag & Drop Area */}
@@ -194,6 +192,7 @@ export const AddBook: React.FC<AddBookProps> = ({
             onClick={() => fileInputRef.current?.click()}
             role="button"
             tabIndex={0}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInputRef.current?.click(); } }}
             className={`border-2 border-dashed rounded-3xl p-8 sm:p-12 text-center cursor-pointer transition-all flex flex-col items-center justify-center ${
               isDragOver
                 ? 'border-indigo-600 bg-indigo-50/50 scale-[1.01]'
@@ -224,44 +223,9 @@ export const AddBook: React.FC<AddBookProps> = ({
             </button>
           </div>
 
-          {/* Quick Pick Sample Curricula */}
-          <div className="pt-2">
-            <span className="text-xs font-bold text-slate-700 block mb-3 font-sans">
-              {t.addBook.sampleQuickPickTitle}
-            </span>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {[
-                {
-                  title: 'كتاب العلوم والأحياء: الغشاء الخلوي والنقل النشط.pdf',
-                  subject: 'الأحياء والعلوم الطبيعية',
-                },
-                {
-                  title: 'كتاب الرياضيات: الدوال التربيعية والقانون العام.pdf',
-                  subject: 'الرياضيات والجبر',
-                },
-                {
-                  title: 'كتاب الجغرافيا: حوض وادي النيل والموارد المائية.pdf',
-                  subject: 'الجغرافيا والبيئة',
-                },
-              ].map((sample, idx) => (
-                <button
-                  type="button"
-                  key={idx}
-                  onClick={() => handleQuickPickSample(sample.title, sample.subject)}
-                  className="p-3.5 rounded-xl border border-slate-200 hover:border-slate-300 bg-slate-50/70 hover:bg-white text-right transition-all flex items-center justify-between gap-2 group active:scale-[0.99] motion-reduce:transform-none min-h-[44px]"
-                >
-                  <div className="truncate">
-                    <span className="text-xs font-bold text-slate-800 block truncate group-hover:text-indigo-600 font-display">
-                      {sample.title.replace(/\.pdf$/, '')}
-                    </span>
-                    <span className="text-[11px] text-slate-500 font-sans">{sample.subject}</span>
-                  </div>
-                  <AppIcon name="fileText" size="sm" className="text-slate-400 group-hover:text-indigo-600 shrink-0" />
-                </button>
-              ))}
-            </div>
-          </div>
+          <p className="text-sm leading-7 text-slate-600 bg-indigo-50 border border-indigo-100 rounded-2xl p-4">
+            يُحفظ ملفك على هذا المتصفح فقط ولا يُرسل إلى خدمة ذكاء اصطناعي. بعد فتحه، حدّد اسم الدرس وصفحاته لإنشاء مراجعة استخراجية موثّقة. ملفات الصور دون نص تحتاج OCR غير متاح حاليًا، ولن نعرض محتوى بديلًا عنها.
+          </p>
         </div>
       )}
 
@@ -301,7 +265,7 @@ export const AddBook: React.FC<AddBookProps> = ({
             {t.addBook.successTitle}
           </h3>
           <p className="text-xs sm:text-sm text-slate-500 mb-6 font-sans">
-            {t.addBook.successDesc}
+            تم حفظ PDF الأصلي محليًا. افتحه لاستخراج النص والتحقق من الصفحات؛ حفظ الملف لا يعني نجاح استخراج نصه.
           </p>
 
           <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl text-start mb-6">
@@ -344,7 +308,7 @@ export const AddBook: React.FC<AddBookProps> = ({
           <h3 className="text-lg font-bold text-slate-900 mb-2 font-display">
             {t.addBook.errorTitle}
           </h3>
-          <p className="text-xs sm:text-sm text-slate-500 mb-6 font-sans">
+          <p role="alert" className="text-xs sm:text-sm text-slate-500 mb-6 font-sans">
             {errorMessage || t.addBook.errorDesc}
           </p>
 

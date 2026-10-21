@@ -1,0 +1,77 @@
+{
+  "preview": "http://127.0.0.1:4173/",
+  "browser": "151.0.7922.34",
+  "executablePath": "/usr/bin/chromium",
+  "profiles": [
+    "desktop Linux 1440x1000",
+    "mobile touch emulation 390x844 (not physical device)"
+  ],
+  "scenarios": [
+    {
+      "name": "desktop: binary PDF upload, 3-page extraction, 2–3 lesson citations, saved lesson reload",
+      "passed": true
+    },
+    {
+      "name": "desktop: changed range clears stale output and reversed range reports failure",
+      "passed": true
+    },
+    {
+      "name": "scanned PDF: explicit no-text cause, no substitute material or scores",
+      "passed": true
+    },
+    {
+      "name": "mixed PDF: page-specific warning and no summary/questions for empty-only lesson",
+      "passed": true
+    },
+    {
+      "name": "invalid upload: fake.pdf reports actual cause without saving substitute",
+      "passed": true
+    },
+    {
+      "name": "invalid upload: corrupt.pdf reports actual cause without saving substitute",
+      "passed": true
+    },
+    {
+      "name": "invalid upload: empty.pdf reports actual cause without saving substitute",
+      "passed": true
+    },
+    {
+      "name": "invalid upload: password-protected.pdf reports actual cause without saving substitute",
+      "passed": true
+    },
+    {
+      "name": "Arabic PDF: readable logical text and page-2 grounded review without generated facts",
+      "passed": true
+    },
+    {
+      "name": "mobile 390x844 touch emulation: upload, usable toolbar and page-grounded review",
+      "passed": true
+    },
+    {
+      "name": "mobile: AR to EN to AR switches review UI, validation, saved lesson and RTL/LTR",
+      "passed": true
+    },
+    {
+      "name": "English: scanned/mixed warnings, invalid range and empty lesson use English only",
+      "passed": true
+    },
+    {
+      "name": "privacy: no AI request or external PDF/student transmission",
+      "passed": true
+    }
+  ],
+  "externalAssetRequests": [
+    "GET https://fonts.googleapis.com/css2",
+    "GET https://fonts.gstatic.com/s/ibmplexsansarabic/v15/Qw3CZRtWPQCuHme67tEYUIx3Kh0PHR9N6Ys43PWrfQ.woff2",
+    "GET https://fonts.gstatic.com/s/ibmplexsansarabic/v15/Qw3NZRtWPQCuHme67tEYUIx3Kh0PHR9N6YOG-eCRXMR5Kw.woff2",
+    "GET https://fonts.gstatic.com/s/ibmplexsansarabic/v15/Qw3NZRtWPQCuHme67tEYUIx3Kh0PHR9N6YPO_-CRXMR5Kw.woff2",
+    "GET https://fonts.gstatic.com/s/ibmplexsansarabic/v15/Qw3NZRtWPQCuHme67tEYUIx3Kh0PHR9N6YPO_-CUXMQ.woff2",
+    "GET https://fonts.gstatic.com/s/ibmplexsansarabic/v15/Qw3NZRtWPQCuHme67tEYUIx3Kh0PHR9N6YPi-OCRXMR5Kw.woff2",
+    "GET https://fonts.gstatic.com/s/ibmplexsansarabic/v15/Qw3CZRtWPQCuHme67tEYUIx3Kh0PHR9N6Ys93PU.woff2",
+    "GET https://fonts.gstatic.com/s/ibmplexsansarabic/v15/Qw3NZRtWPQCuHme67tEYUIx3Kh0PHR9N6YPi-OCUXMQ.woff2",
+    "GET https://fonts.gstatic.com/s/ibmplexsansarabic/v15/Qw3NZRtWPQCuHme67tEYUIx3Kh0PHR9N6YOG-eCUXMQ.woff2"
+  ],
+  "forbiddenRequests": [],
+  "passed": 13,
+  "failed": 0
+}

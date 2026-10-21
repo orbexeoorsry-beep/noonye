@@ -46,7 +46,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate, onOpenBook, featuredBook
           </div>
 
           <div className="flex items-center border-t border-slate-100 bg-slate-50/80 p-5 sm:p-8 lg:border-t-0 lg:border-s lg:p-10">
-            {featuredBook ? (
+            {featuredBook?.source === 'local' ? (
               <button
                 type="button"
                 onClick={() => onOpenBook(featuredBook.id)}

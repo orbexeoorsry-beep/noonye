@@ -1,0 +1,173 @@
+Wed Oct 21 19:13:13 UTC 2026
+v24.19.0
+11.17.0
+
+> react-example@0.0.0 test
+> tsx tests/pdf-viewer.test.ts && tsx tests/pdf-upload.test.ts && tsx tests/pdf-study.test.ts && tsx tests/ai-safety.test.ts && tsx tests/pdf-fit-scale.test.ts && tsx tests/pdf-study-i18n.test.ts
+
+🧪 Starting Noon Learning PDF Viewer Test Suite...
+
+  ✅ PASS: Generated educational PDF is a valid binary Uint8Array
+  ✅ PASS: PDF has adequate size (8901 bytes)
+  ✅ PASS: PDF starts with standard %PDF-1.4 header
+  ✅ PASS: Properly rejects corrupted non-PDF bytes
+  ✅ PASS: Navigates forward to page 2
+  ✅ PASS: Navigates forward to page 3 (last page)
+  ✅ PASS: Correctly blocks navigation beyond last page
+  ✅ PASS: Navigates back to page 2
+  ✅ PASS: Accepts valid page input (2)
+  ✅ PASS: Rejects page 0 (less than 1)
+  ✅ PASS: Rejects page 4 (exceeds total pages)
+  ✅ PASS: Rejects non-numeric input
+  ✅ PASS: Zooms in from 1.0 to 1.15
+  ✅ PASS: Zooms out from 1.15 back to 1.0
+  ✅ PASS: Calculates exact mobile fit width scale (0.63)
+  ✅ PASS: Unavailable IndexedDB explicitly rejects save; no volatile fallback
+  ✅ PASS: Unavailable IndexedDB explicitly rejects load; no volatile fallback
+  ✅ PASS: Unavailable IndexedDB explicitly rejects list; no volatile fallback
+  ✅ PASS: Storage load failure propagates without generating a substitute
+  ✅ PASS: Arabic missing-file message explains re-upload recovery
+  ✅ PASS: English quota message explicitly says changes were not saved
+  ✅ PASS: Saved PDF bytes exist in native IndexedDB through a new connection
+  ✅ PASS: Last page survives database connection reopening
+  ✅ PASS: Typed array slices persist only their selected bytes
+  ✅ PASS: Quota failure rejects saving instead of returning volatile success
+  ✅ PASS: Failed blob save rolls back its metadata atomically
+  ✅ PASS: Failed save leaves no memory fallback
+  ✅ PASS: Aborted transaction after successful requests rejects saving
+  ✅ PASS: Last-page update rejects a transaction abort
+  ✅ PASS: Aborted save persists no metadata
+  ✅ PASS: Aborted last-page update keeps previous position
+  ✅ PASS: Aborted read is an explicit load error, not missing data
+  ✅ PASS: Missing user file raises a recoverable missing-file error
+  ✅ PASS: Missing user PDF never invokes sample generation
+  ✅ PASS: Existing user PDF loads its original bytes
+  ✅ PASS: Only an explicitly designated demo/admin book may generate a sample
+  ✅ PASS: Missing metadata cannot claim last-page persistence
+  ✅ PASS: Deletion removes both native PDF and metadata
+  ✅ PASS: Clearing returns the committed number of remaining documents
+  ✅ PASS: Clear commits to native IndexedDB
+  ✅ PASS: Region selection is 100% zoom-invariant and remains fixed to the exact page content across zoom levels
+  ✅ PASS: Moves selection while clamping properly within right page edge (100 - 50 = 50)
+  ✅ PASS: Transitioning to another page cleanly clears selection region
+  ✅ PASS: Transitioning to another page cleanly closes assistant panel and clears response
+  ✅ PASS: Selection Assistant Panel contains all 6 required interactive tools
+  ✅ PASS: Properly guards against opening assistant when no region is selected
+  ✅ PASS: AI Gateway exposes explain function
+  ✅ PASS: AI Gateway exposes simplify function
+  ✅ PASS: AI Gateway exposes hint function
+  ✅ PASS: AI Gateway exposes quiz function
+  ✅ PASS: AI Gateway exposes analyzeProblem function
+  ✅ PASS: AI Gateway exposes explainImage function
+  ✅ PASS: AI Gateway exposes unified execute function
+  ✅ PASS: AI Gateway tracks remaining session requests
+  ✅ PASS: AI Gateway initializes with positive session request quota
+  ✅ PASS: Mathematical problem analysis follows the 7 required sections in exact sequence
+  ✅ PASS: Unclear problem message matches exact required Arabic text
+  ✅ PASS: Visual analysis follows the 6 required sections in exact sequence
+  ✅ PASS: Unclear image message matches exact required Arabic text
+  ✅ PASS: Visual response properly distinguishes between visible on page and inferred from element
+  ✅ PASS: Verified 100% absence of hardcoded API keys in client codebase
+  ✅ PASS: Default language is Arabic (ar)
+  ✅ PASS: Arabic direction is RTL
+  ✅ PASS: English direction is LTR
+  ✅ PASS: ar.common.close exists and equals إغلاق
+  ✅ PASS: en.common.close exists and equals Close
+  ✅ PASS: ar.library.empty exists
+  ✅ PASS: ar.bookViewer.nextPage exists
+  ✅ PASS: ar.localDocuments.savedLocally exists
+  ✅ PASS: ar.aiAssistant.explain exists
+  ✅ PASS: ar.guidedMath.analyzeProblemTitle exists
+  ✅ PASS: ar.scienceAnalysis.explainImageTitle exists
+  ✅ PASS: ar.errors.invalidPdf exists
+  ✅ PASS: ar.settings.title exists
+  ✅ PASS: Successfully switched language to English (en)
+  ✅ PASS: Successfully switched language back to Arabic (ar)
+  ✅ PASS: Extensible language registration works dynamically
+  ✅ PASS: Detects Geographic 9th curriculum from book title
+  ✅ PASS: Extracted all lessons for Geographic 9th curriculum (8+ lessons/evaluations)
+  ✅ PASS: Found lesson corresponding to page 13
+  ✅ PASS: Lesson on page 13 matches lesson 1 evaluation
+  ✅ PASS: Curriculum context contains answers for astronomy location question
+  ✅ PASS: Generates full curriculum quiz for single lesson (5+ questions)
+  ✅ PASS: Quiz questions have 4 multiple-choice options
+  ✅ PASS: Quiz questions include Gemini hint and explanation
+  ✅ PASS: Generates comprehensive quiz across multiple selected lessons (8+ questions)
+  ✅ PASS: Calculates 100% score for perfect answers
+  ✅ PASS: Assigns excellent grade badge for top score
+  ✅ PASS: Includes Gemini pedagogical feedback
+  ✅ PASS: Includes full question-by-question breakdown in result
+  ✅ PASS: Extracts full structured lessons for Biology book
+  ✅ PASS: Generates rich Gemini quiz for Biology lesson
+  ✅ PASS: Extracts full structured lessons for Math book
+  ✅ PASS: Generates rich Gemini quiz for Math lesson
+  ✅ PASS: Intelligently generates curriculum lessons for any uploaded book
+  ✅ PASS: Generates multi-lesson Gemini quiz for custom uploaded book
+  ✅ PASS: AdminBookStore returns curated admin books
+  ✅ PASS: All AdminBookStore books have source="admin" and status="demo"
+  ✅ PASS: Correctly identifies admin book bio-grade11
+  ✅ PASS: Correctly rejects user book as admin book
+Admin books cannot be deleted
+  ✅ PASS: Admin books are immutable and protected against deletion
+  ✅ PASS: Local user book added successfully to local storage
+  ✅ PASS: User book never leaks into AdminBookStore
+  ✅ PASS: Local user book deleted successfully
+  ✅ PASS: Admin books remain completely intact after local deletion
+  ✅ PASS: LessonSummaryService successfully retrieves single lesson curated summary
+  ✅ PASS: Curated summary sections are successfully populated
+  ✅ PASS: Summary review questions count aligns with rules
+  ✅ PASS: LessonSummaryService creates a combined multi-lesson summary
+  ✅ PASS: Composite summary includes general overview summary section
+
+========================================
+ProgressPage honesty tests passed in Arabic and English.
+  ✅ PASS: Progress page hides synthetic performance in Arabic and English
+Test Results: 111 Passed, 0 Failed
+========================================
+
+Warning: Indexing all PDF objects
+PDF upload: valid binary/parser, empty, spoofed, corrupt, password, size limit, scanned and cleanup tests passed
+Warning: Unknown command "Thermal".
+Warning: getTextContent - ignoring errors during "GetTextContent: page 0" task: "FormatError: Illegal character: 41".
+Warning: Unknown command "arc".
+Warning: Unknown command "arc".
+Warning: Unknown command "arc".
+Warning: Indexing all PDF objects
+pdf-study tests passed (including actual Arabic PDF and cancellation)
+AI safety hard-disable tests passed
+PASS: 390px viewport fits standard page within 24px gutters
+PASS: different-width citation page also fits without cropping
+PASS: resize recomputes fit scale within same page gutters
+PASS: manual zoom scales from fitted baseline
+PASS: manual zoom out remains relative to fitted baseline
+PASS pdf-study i18n: complete AR/EN key and placeholder parity, headings, descriptions, RTL/LTR, no hardcoded Arabic UI
+TEST_EXIT=0
+
+> react-example@0.0.0 lint
+> tsc --noEmit
+
+LINT_EXIT=0
+
+> react-example@0.0.0 build
+> node scripts/copy-pdf-assets.mjs && vite build
+
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - `__dirname` (vite.config.ts:11:27). Use `import.meta.dirname` instead
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+vite v8.3.4 building client environment for production...
+transforming...
+✓ 1751 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                              1.42 kB │ gzip:   0.69 kB
+dist/assets/pdf.worker.min-CjEcRF4W.mjs  1,264.34 kB
+dist/assets/index-COPfRciB.css              72.64 kB │ gzip:  12.23 kB
+dist/assets/index-D5w-hi_d.js              936.53 kB │ gzip: 277.49 kB
+
+✓ built in 657ms
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+BUILD_EXIT=0
