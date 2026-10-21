@@ -150,23 +150,23 @@ export const LessonQuizModal: React.FC<LessonQuizModalProps> = ({
                       : 'اختيار عدة دروس للاختبار الشامل'
                     : mode === 'result'
                     ? isEnglish
-                      ? 'Quiz Score & Evaluation'
-                      : 'نتيجة ودرجة الاختبار'
+                      ? 'Practice Results'
+                      : 'نتيجة التدريب'
                     : isEnglish
                     ? 'Noon Interactive Quiz'
                     : 'اختبار نون التفاعلي'}
                 </h3>
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-700 flex items-center gap-1 font-sans">
                   <AppIcon name="award" size="xs" />
-                  {isEnglish ? 'Noon Assessment' : 'تقييم نون'}
+                  {isEnglish ? 'Local Practice (Demo)' : 'تدريب محلي (تجريبي)'}
                 </span>
               </div>
               <p className="text-[11px] text-slate-500 line-clamp-1 font-sans">
                 {mode === 'quiz' && currentQ
                   ? currentQ.lessonTitle
                   : isEnglish
-                  ? 'Curricular quiz measuring comprehension and mastery accurately'
-                  : 'اختبار منهجي يقيس الفهم والاستيعاب بدقة'}
+                  ? 'Local practice only; this score does not measure overall learning.'
+                  : 'تدريب محلي فقط؛ لا تقيس النتيجة مستوى التعلم العام.'}
               </p>
             </div>
           </div>
@@ -212,8 +212,8 @@ export const LessonQuizModal: React.FC<LessonQuizModalProps> = ({
                 </p>
                 <p className="text-indigo-700 text-[11px]">
                   {isEnglish
-                    ? 'Noon will compile comprehensive questions across all selected lessons to measure your knowledge integration.'
-                    : 'سيجمع نظام نون أسئلة شاملة ومتنوعة من كافة الدروس التي تختارها لقياس مدى ترابط المعلومات لديك.'}
+                    ? 'This demo combines locally available practice questions from the selected lessons.'
+                    : 'يجمع هذا التدريب التجريبي أسئلة متاحة محلياً من الدروس المختارة.'}
                 </p>
               </div>
 
@@ -290,7 +290,7 @@ export const LessonQuizModal: React.FC<LessonQuizModalProps> = ({
             </div>
           )}
 
-          {/* Mode 2: ACTIVE QUESTION (GEMINI STUDENT QUIZ) */}
+          {/* Mode 2: ACTIVE QUESTION (LOCAL PRACTICE QUIZ) */}
           {mode === 'quiz' && currentQ && (
             <div className="space-y-5">
               {/* Progress and Topic Bar */}
@@ -387,7 +387,7 @@ export const LessonQuizModal: React.FC<LessonQuizModalProps> = ({
                 })}
               </div>
 
-              {/* Gemini Hint Toggle & Card */}
+              {/* Practice Hint Toggle & Card */}
               <div className="pt-1">
                 <button
                   type="button"
@@ -401,8 +401,8 @@ export const LessonQuizModal: React.FC<LessonQuizModalProps> = ({
                         ? 'Hide Hint'
                         : 'إخفاء التلميح'
                       : isEnglish
-                      ? '💡 Guided Hint'
-                      : '💡 تلميح موجه'}
+                      ? '💡 Practice Hint'
+                      : '💡 تلميح للتدريب'}
                   </span>
                 </button>
 
@@ -423,8 +423,8 @@ export const LessonQuizModal: React.FC<LessonQuizModalProps> = ({
                     <AppIcon name="sparkles" size="xs" className="text-indigo-600" />
                     <span>
                       {isEnglish
-                        ? 'Curricular Explanation & Justification:'
-                        : 'تفسير وتبرير الإجابة المنهجي:'}
+                        ? 'Explanation:'
+                        : 'توضيح:'}
                     </span>
                   </div>
                   <p className="text-xs text-slate-600 leading-relaxed font-sans">
@@ -469,8 +469,8 @@ export const LessonQuizModal: React.FC<LessonQuizModalProps> = ({
                 <h4 className="text-xs font-bold text-slate-800 flex items-center gap-1.5 font-display">
                   <span>
                     {isEnglish
-                      ? 'Question Review & Concept Correction:'
-                      : 'مراجعة الأسئلة وتصحيح المفاهيم:'}
+                      ? 'Answer Review:'
+                      : 'مراجعة الإجابات:'}
                   </span>
                 </h4>
 
@@ -548,8 +548,8 @@ export const LessonQuizModal: React.FC<LessonQuizModalProps> = ({
                 <span>
                   {currentQuestionIndex + 1 === totalQ
                     ? isEnglish
-                      ? 'View Score & Result'
-                      : 'عرض النتيجة والدرجة'
+                      ? 'View Practice Results'
+                      : 'عرض نتيجة التدريب'
                     : isEnglish
                     ? 'Next Question'
                     : 'السؤال التالي'}

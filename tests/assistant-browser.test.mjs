@@ -7,7 +7,12 @@ let browser;
 try {
  let ready=false; for(let i=0;i<80;i++){try{if((await fetch(`http://127.0.0.1:${port}/`)).ok){ready=true;break;}}catch{} await new Promise(r=>setTimeout(r,100));} assert.ok(ready,'local app did not become ready');
  const executablePath=process.env.CHROMIUM_EXECUTABLE_PATH || '/usr/bin/chromium';
- browser=await chromium.launch({headless:true,executablePath,args:['--no-sandbox']}); const page=await browser.newPage(); const requests=[]; page.on('request',r=>{if(r.url().includes('/api/assistant/explain'))requests.push(r.url());}); await page.goto(`http://127.0.0.1:${port}/`);
+ browser=await chromium.launch({headless:true,executablePath,args:['--no-sandbox']}); const page=await browser.newPage(); const requests=[];
+ const fixture={id:'synthetic-p0-book',source:'admin',title:'Synthetic test book',subject:'Synthetic',gradeLevel:'Synthetic',totalPages:1,currentPage:1,progressPercent:1,status:'demo',lastOpened:'Synthetic',summary:'Synthetic fixture only',accentColor:'#0284c7',pages:[{pageNumber:1,chapterTitle:'Synthetic chapter',lessonTitle:'Synthetic lesson',pageNotesCount:0,elements:[]}]};
+ let fixtureLoaded=false;
+ await page.route('**/*',async route=>{const url=new URL(route.request().url());if(url.origin!==`http://127.0.0.1:${port}`){await route.abort('blockedbyclient');return;}if(url.pathname==='/src/mock-data/books.ts'){fixtureLoaded=true;await route.fulfill({contentType:'application/javascript',body:`export const INITIAL_ADMIN_BOOKS=${JSON.stringify([fixture])}; export const INITIAL_BOOKS=INITIAL_ADMIN_BOOKS;`});return;}await route.continue();});
+ page.on('request',r=>{if(r.url().includes('/api/assistant/explain'))requests.push(r.url());}); await page.goto(`http://127.0.0.1:${port}/`);
+ assert.ok(fixtureLoaded,'synthetic catalog fixture must replace the demo catalog');
  await page.locator('button').filter({hasText:/Continue Reading|متابعة القراءة/}).first().click();
  const button=page.locator('button[title="Assistant temporarily unavailable"]'); await button.waitFor({state:'attached',timeout:15000});
  const controls=await button.evaluate(el=>{let count=0;el.addEventListener('click',()=>count++); el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true})); el.focus();el.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}));el.dispatchEvent(new KeyboardEvent('keydown',{key:' ',bubbles:true}));return {disabled:el.disabled,ariaDisabled:el.getAttribute('aria-disabled'),clickCount:count};});
