@@ -9,7 +9,7 @@
     "build": "node scripts/copy-pdf-assets.mjs && vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
-    "test": "tsx tests/pdf-viewer.test.ts && tsx tests/pdf-upload.test.ts && tsx tests/pdf-study.test.ts && tsx tests/ai-safety.test.ts && tsx tests/pdf-fit-scale.test.ts && tsx tests/pdf-study-i18n.test.ts",
+    "test": "tsx tests/pdf-viewer.test.ts && tsx tests/pdf-upload.test.ts && tsx tests/pdf-study.test.ts && tsx tests/ai-safety.test.ts && tsx tests/admin-ai-boundary.test.ts && tsx tests/pdf-fit-scale.test.ts && tsx tests/pdf-study-i18n.test.ts",
     "lint": "tsc --noEmit",
     "test:e2e": "tsx tests/pdf-study.e2e.ts"
   },
