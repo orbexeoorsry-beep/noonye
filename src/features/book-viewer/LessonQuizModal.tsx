@@ -158,7 +158,7 @@ export const LessonQuizModal: React.FC<LessonQuizModalProps> = ({
                 </h3>
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-700 flex items-center gap-1 font-sans">
                   <AppIcon name="award" size="xs" />
-                  {isEnglish ? 'Gemini Assessment' : 'تقييم جيمني'}
+                  {isEnglish ? 'Noon Assessment' : 'تقييم نون'}
                 </span>
               </div>
               <p className="text-[11px] text-slate-500 line-clamp-1 font-sans">
@@ -212,8 +212,8 @@ export const LessonQuizModal: React.FC<LessonQuizModalProps> = ({
                 </p>
                 <p className="text-indigo-700 text-[11px]">
                   {isEnglish
-                    ? 'Gemini will compile comprehensive questions across all selected lessons to measure your knowledge integration.'
-                    : 'سيقوم نظام جيمني بجمع أسئلة شاملة ومتنوعة من كافة الدروس التي تختارها لقياس مدى ترابط المعلومات لديك.'}
+                    ? 'Noon will compile comprehensive questions across all selected lessons to measure your knowledge integration.'
+                    : 'سيجمع نظام نون أسئلة شاملة ومتنوعة من كافة الدروس التي تختارها لقياس مدى ترابط المعلومات لديك.'}
                 </p>
               </div>
 
@@ -401,15 +401,15 @@ export const LessonQuizModal: React.FC<LessonQuizModalProps> = ({
                         ? 'Hide Hint'
                         : 'إخفاء التلميح'
                       : isEnglish
-                      ? '💡 Gemini Guided Hint'
-                      : '💡 تلميح استدلالي من جيمني'}
+                      ? '💡 Guided Hint'
+                      : '💡 تلميح موجه'}
                   </span>
                 </button>
 
                 {isHintOpen && (
                   <div className="mt-2.5 p-3.5 rounded-2xl bg-amber-50/80 border border-amber-200 text-xs text-amber-900 leading-relaxed animate-in fade-in duration-200 motion-reduce:animate-none font-sans">
                     <span className="font-bold text-amber-800 block mb-0.5">
-                      {isEnglish ? 'Gemini Guidance:' : 'توجيه جيمني:'}
+                      {isEnglish ? 'Guidance:' : 'توجيه:'}
                     </span>
                     {currentQ.hint}
                   </div>

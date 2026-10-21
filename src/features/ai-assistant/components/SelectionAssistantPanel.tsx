@@ -1428,8 +1428,8 @@ export const SelectionAssistantPanel: React.FC<SelectionAssistantPanelProps> = (
                   ? 'Analyzed via AI Gateway according to Noon educational rules without altering equation symbols or textbook content.'
                   : 'تم التحليل عبر AI Gateway وفق القواعد التربوية الصارمة لنون دون تحريف لرموز المسألة أو محتوى الكتاب.')
               : isEnglish
-              ? 'Analyzed using Noon curriculum engine. When Gemini is available on the server, live AI generation is used automatically.'
-              : 'يعمل المساعد حالياً بالوضع التجريبي المحلي. عند توفر مفتاح Gemini على الخادم، سيتم التوليد الفوري والمخصص.'}
+              ? 'Assistant features are currently unavailable. This content is provided by the Noon curriculum engine.'
+              : 'المساعد غير متاح حالياً. يُعرض هذا المحتوى من محرك المناهج في نون.'}
           </p>
         </div>
       </div>
