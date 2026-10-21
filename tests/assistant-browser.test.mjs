@@ -6,7 +6,8 @@ const server=spawn('node_modules/.bin/tsx',['server.ts'],{cwd:process.cwd(),env:
 let browser;
 try {
  let ready=false; for(let i=0;i<80;i++){try{if((await fetch(`http://127.0.0.1:${port}/`)).ok){ready=true;break;}}catch{} await new Promise(r=>setTimeout(r,100));} assert.ok(ready,'local app did not become ready');
- browser=await chromium.launch({headless:true,executablePath:'/usr/bin/chromium',args:['--no-sandbox']}); const page=await browser.newPage(); const requests=[]; page.on('request',r=>{if(r.url().includes('/api/assistant/explain'))requests.push(r.url());}); await page.goto(`http://127.0.0.1:${port}/`);
+ const executablePath=process.env.CHROMIUM_EXECUTABLE_PATH || '/usr/bin/chromium';
+ browser=await chromium.launch({headless:true,executablePath,args:['--no-sandbox']}); const page=await browser.newPage(); const requests=[]; page.on('request',r=>{if(r.url().includes('/api/assistant/explain'))requests.push(r.url());}); await page.goto(`http://127.0.0.1:${port}/`);
  await page.locator('button').filter({hasText:/Continue Reading|متابعة القراءة/}).first().click();
  const button=page.locator('button[title="Assistant temporarily unavailable"]'); await button.waitFor({state:'attached',timeout:15000});
  const controls=await button.evaluate(el=>{let count=0;el.addEventListener('click',()=>count++); el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true})); el.focus();el.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}));el.dispatchEvent(new KeyboardEvent('keydown',{key:' ',bubbles:true}));return {disabled:el.disabled,ariaDisabled:el.getAttribute('aria-disabled'),clickCount:count};});

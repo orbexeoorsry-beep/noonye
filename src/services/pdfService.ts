@@ -268,6 +268,19 @@ function enforceLtrCanvasContext(canvas: HTMLCanvasElement, context: CanvasRende
   }
 }
 
+export async function normalizePdfSource(
+  source: ArrayBuffer | Uint8Array | Blob | string
+): Promise<ArrayBuffer | Uint8Array | string> {
+  if (typeof Blob !== 'undefined' && source instanceof Blob) {
+    return new Uint8Array((await source.arrayBuffer()).slice(0));
+  }
+  if (source instanceof ArrayBuffer) return new Uint8Array(source.slice(0));
+  if (source instanceof Uint8Array) {
+    return new Uint8Array(source.buffer.slice(source.byteOffset, source.byteOffset + source.byteLength));
+  }
+  if (typeof source === 'string') return source;
+  throw new TypeError('Unsupported PDF source');
+}
 export const pdfService = {
   /**
    * Loads any PDF Document resiliently from an ArrayBuffer, Uint8Array, Blob, or URL.
@@ -278,19 +291,7 @@ export const pdfService = {
   async loadDocument(
     source: ArrayBuffer | Uint8Array | Blob | string
   ): Promise<pdfjsLib.PDFDocumentProxy> {
-    let resolvedSource: ArrayBuffer | Uint8Array | string;
-
-    if (typeof Blob !== 'undefined' && source instanceof Blob) {
-      const buf = await source.arrayBuffer();
-      resolvedSource = new Uint8Array(buf.slice(0));
-    } else if (source instanceof ArrayBuffer) {
-      // Clone buffer so PDF.js worker transfer never detaches caller's ArrayBuffer
-      resolvedSource = new Uint8Array(source.slice(0));
-    } else if (source instanceof Uint8Array) {
-      resolvedSource = new Uint8Array(source.buffer.slice(source.byteOffset, source.byteOffset + source.byteLength));
-    } else {
-      resolvedSource = source;
-    }
+    const resolvedSource = await normalizePdfSource(source);
 
     const baseParams = {
       cMapUrl: CMAP_URL,

@@ -14,6 +14,7 @@
 import { generateEducationalSamplePdf } from '../src/services/samplePdfGenerator';
 import { localDocumentStore } from '../src/services/localDocumentStore';
 import { storageService } from '../src/services/storage';
+import { normalizePdfSource } from '../src/services/pdfService';
 
 async function runTests() {
   console.log('🧪 Starting Noon Learning PDF Viewer Test Suite...\n');
@@ -30,6 +31,15 @@ async function runTests() {
     }
   }
 
+  // Blob normalization regression: PDF.js must receive binary data, never Blob.
+  try {
+    const expected = generateEducationalSamplePdf();
+    const blobPdf = new Blob([expected.buffer.slice(expected.byteOffset, expected.byteOffset + expected.byteLength) as ArrayBuffer], { type: 'application/pdf' });
+    const normalized = await normalizePdfSource(blobPdf);
+    assert(normalized instanceof Uint8Array && normalized.length === expected.length && normalized[0] === expected[0], 'Converts Blob PDF source to Uint8Array');
+  } catch (e) {
+    assert(false, `Blob PDF conversion failed: ${e}`);
+  }
   // Test 1: Generate valid educational PDF
   try {
     const pdfData = generateEducationalSamplePdf();

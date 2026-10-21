@@ -1437,7 +1437,7 @@ ${richContextForPrompt}
 
     try {
       let pageSnapshotImage = '';
-      const totalExtractedTextLen = Array.from(extractedTextsMap.values()).reduce(
+      const totalExtractedTextLen = Array.from(Object.values(pdfTextsByLessonId)).reduce(
         (acc, t) => acc + t.length,
         0
       );

@@ -26,6 +26,7 @@ export const LessonQuizModal: React.FC<LessonQuizModalProps> = ({
   onQuizCompleted,
 }) => {
   const { lang, isRTL } = useI18n();
+  const quizLanguage: 'ar' | 'en' = lang === 'en' ? 'en' : 'ar';
   const isEnglish = lang === 'en';
 
   // Mode: 'quiz' (taking quiz) | 'multiSelect' (picking multiple lessons) | 'result' (viewing score)
@@ -58,7 +59,7 @@ export const LessonQuizModal: React.FC<LessonQuizModalProps> = ({
   }, [isOpen, initialLesson?.id, lang]);
 
   const startQuizWithLessons = (lessonsToTest: BookLesson[]) => {
-    const generatedQuestions = lessonQuizService.getQuestionsForLessons(lessonsToTest, lang);
+    const generatedQuestions = lessonQuizService.getQuestionsForLessons(lessonsToTest, quizLanguage);
     setQuestions(generatedQuestions);
     setCurrentQuestionIndex(0);
     setSelectedAnswers({});
@@ -103,7 +104,7 @@ export const LessonQuizModal: React.FC<LessonQuizModalProps> = ({
       setCurrentQuestionIndex((prev) => prev + 1);
       setIsAnswerSubmitted(Boolean(questions[currentQuestionIndex + 1] && selectedAnswers[questions[currentQuestionIndex + 1].id] !== undefined));
     } else {
-      const evaluation = lessonQuizService.evaluateQuiz(questions, selectedAnswers, lang);
+      const evaluation = lessonQuizService.evaluateQuiz(questions, selectedAnswers, quizLanguage);
       setResult(evaluation);
       setMode('result');
     }
