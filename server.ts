@@ -3,8 +3,9 @@ import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { readFileSync, realpathSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import dotenv from 'dotenv';
-import { accountsConfig, safeAccountHttpPath } from './server/features/accounts/config';
+import { accountsConfig, safeAccountHttpPath, assertNoSymlinkPath } from './server/features/accounts/config';
 import { AccountStore } from './server/features/accounts/store';
 import { createAccountsRouter } from './server/features/accounts/router';
 dotenv.config();
@@ -21,8 +22,16 @@ async function startServer() {
   const accounts = accountsConfig(process.env, __dirname);
   if (accounts.enabled) process.umask(0o077);
   const accountStore = accounts.enabled ? new AccountStore(accounts.database!, __dirname) : undefined;
+  const trustedViteFiles: string[] = [];
+  if (process.env.NODE_ENV !== 'production') {
+    const packageRoot = path.dirname(realpathSync(createRequire(import.meta.url).resolve('vite/package.json')));
+    const clientEnv = path.join(packageRoot, 'dist/client/env.mjs');
+    assertNoSymlinkPath(clientEnv);
+    if (realpathSync(clientEnv) !== clientEnv) throw new Error('Vite client environment module must be the exact physical public file');
+    trustedViteFiles.push(clientEnv);
+  }
   app.use((req, res, next) => {
-    if (!safeAccountHttpPath(req.originalUrl, __dirname, accounts.enabled)) {
+    if (!safeAccountHttpPath(req.originalUrl, __dirname, accounts.enabled, accounts.database, trustedViteFiles)) {
       res.status(404).set('Cache-Control', 'no-store').type('text/plain').send('Not found'); return;
     }
     next();

@@ -3,10 +3,11 @@ import assert from 'node:assert/strict';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { request as httpRequest } from 'node:http';
 import {
-  copyFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync,
-  rmSync, symlinkSync, writeFileSync,
+  copyFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, linkSync,
+  rmSync, symlinkSync, writeFileSync, realpathSync,
 } from 'node:fs';
 import path from 'node:path';
+import { createRequire } from 'node:module';
 import { DatabaseSync } from 'node:sqlite';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
@@ -45,10 +46,10 @@ async function freePort(): Promise<number> {
   await new Promise<void>(resolve => server.close(() => resolve()));
   return port;
 }
-function envFor(f: Fixture, database: string): NodeJS.ProcessEnv {
+function envFor(f: Fixture, database: string, mode: 'development' | 'production' = 'production'): NodeJS.ProcessEnv {
   return {
     ...process.env,
-    NODE_ENV: 'production',
+    NODE_ENV: mode,
     PORT: String(f.port),
     NOON_ACCOUNTS_LOCAL: '1',
     NOON_LOCAL_ACCOUNTS_DB: database,
@@ -56,10 +57,10 @@ function envFor(f: Fixture, database: string): NodeJS.ProcessEnv {
     TMPDIR: TEST_TMP,
   };
 }
-function launch(f: Fixture, database: string, args: string[] = []): ChildProcess {
+function launch(f: Fixture, database: string, args: string[] = [], mode: 'development' | 'production' = 'production'): ChildProcess {
   return spawn(node, [...args, path.join(f.app, 'server.js')], {
     cwd: f.cwd,
-    env: envFor(f, database),
+    env: envFor(f, database, mode),
     stdio: ['ignore', 'pipe', 'pipe'],
   });
 }
@@ -81,10 +82,13 @@ async function waitExit(child: ChildProcess, timeoutMs = 3500): Promise<{ code: 
 async function stop(child: ChildProcess): Promise<void> {
   if (child.exitCode !== null || child.killed) return;
   child.kill('SIGTERM');
-  await Promise.race([
-    new Promise<void>((resolve) => child.once('exit', () => resolve())),
-    delay(2500).then(() => { child.kill('SIGKILL'); throw new Error('Server failed bounded shutdown'); }),
-  ]);
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    await Promise.race([
+      new Promise<void>((resolve) => child.once('exit', () => resolve())),
+      new Promise<void>((_, reject) => { timer = setTimeout(() => { child.kill('SIGKILL'); reject(new Error('Server failed bounded shutdown')); }, 2500); }),
+    ]);
+  } finally { if (timer) clearTimeout(timer); }
 }
 function get(port: number, requestPath: string): Promise<{ status: number; body: Buffer }> {
   return new Promise((resolve, reject) => {
@@ -224,3 +228,102 @@ test('symlinked production entry resolves security root to physical bundle, not 
     } finally { await stop(child); }
   } finally { clean(f); }
 });
+
+for (const mode of ['development', 'production'] as const) {
+  test(`${mode} actual bundle denies SQLite aliases in public namespaces and Vite paths`, async () => {
+    const f = await fixture();
+    createMarkedDatabase(f.db);
+    let walHandle: DatabaseSync | undefined;
+    if (mode === 'development') {
+      writeFileSync(path.join(f.app, 'package.json'), '{"type":"module"}');
+      writeFileSync(path.join(f.app, 'index.html'), `<!doctype html><title>${shellMarker}</title>`);
+      writeFileSync(path.join(f.app, 'vite.config.mjs'), `export default { cacheDir: ${JSON.stringify(path.join(f.base, 'vite-cache'))}, server: { hmr: false, watch: null } };`);
+    }
+    const child = launch(f, f.db, [], mode);
+    try {
+      await waitForServer(child, f.port);
+      const accountPage = await get(f.port, '/accounts');
+      assert.equal(accountPage.status, 200);
+      assert.match(accountPage.body.toString(), new RegExp(shellMarker));
+      const health = await get(f.port, '/api/health');
+      assert.equal(health.status, 200);
+
+      const vitePackage = realpathSync(createRequire(import.meta.url).resolve('vite/package.json'));
+      const publicViteEnv = path.join(path.dirname(vitePackage), 'dist/client/env.mjs');
+      const publicModule = await get(f.port, '/@fs' + publicViteEnv);
+      assert.equal(publicModule.status, mode === 'development' ? 200 : 404, 'only the exact public Vite client module is allowed in dev');
+      if (mode === 'development') assert.match(publicModule.body.toString(), /globalThis/);
+      writeFileSync(path.join(f.app, '.env'), 'SYNTHETIC_ONLY_SECRET=not-a-real-secret');
+      for (const forbidden of [vitePackage, path.join(f.app, '.env'), publicViteEnv + '.backup']) {
+        const response = await get(f.port, '/@fs' + forbidden);
+        assert.equal(response.status, 404, `no directory-wide @fs permission: ${forbidden}`);
+        assert.equal(response.body.includes(Buffer.from('SYNTHETIC_ONLY_SECRET')), false);
+      }
+
+      // Required paths: separate namespace assertions with no credentials/cookies.
+      symlinkSync(f.db, path.join(f.app, 'dist', 'alias.bin'));
+      symlinkSync(f.db, path.join(f.app, 'public', 'alias.bin'));
+      for (const p of ['/dist/alias.bin', '/public/alias.bin']) {
+        const response = await get(f.port, p);
+        assert.equal(response.status, 404, `${mode} ${p}: expected 404`);
+        assert.equal(response.body.includes(Buffer.from('SQLite format 3')), false);
+        assert.equal(response.body.includes(Buffer.from(dbMarker)), false);
+      }
+
+      const publicCopy = path.join(f.app, 'public', 'sqlite.png');
+      const publicJs = path.join(f.app, 'public', 'sqlite.js');
+      const publicBin = path.join(f.app, 'public', 'sqlite.bin');
+      const srcCopy = path.join(f.app, 'src-sqlite.bin');
+      for (const [source, destination] of [[f.db, publicCopy], [f.db, publicJs], [f.db, publicBin], [f.db, srcCopy]] as const) copyFileSync(source, destination);
+      for (const extension of ['png', 'js', 'bin']) copyFileSync(f.db, path.join(f.app, 'dist', `sqlite.${extension}`));
+      for (const directory of ['public', 'dist']) writeFileSync(path.join(f.app, directory, 'harmless.bin'), 'HARMLESS_STATIC_CONTROL');
+      writeFileSync(path.join(f.app, 'harmless.bin'), 'HARMLESS_STATIC_CONTROL');
+      const harmless = await get(f.port, '/harmless.bin');
+      assert.equal(harmless.status, 200, `${mode}: benign static files must still work`);
+      assert.equal(harmless.body.toString(), 'HARMLESS_STATIC_CONTROL');
+      const raw = path.join(f.base, 'raw.db');
+      const walDb = walHandle = new DatabaseSync(raw);
+      walDb.exec('PRAGMA journal_mode=WAL; CREATE TABLE x(v); INSERT INTO x VALUES (1);');
+      const sideAliases: string[] = [];
+      for (const suffix of ['-wal', '-shm', '-journal']) {
+        const sidecar = `${raw}${suffix}`;
+        if (suffix === '-journal') writeFileSync(sidecar, 'SQLite synthetic journal marker');
+        if (existsSync(sidecar)) {
+          const alias = path.join(f.app, 'public', `sidecar-${suffix.slice(1)}.odd`);
+          symlinkSync(sidecar, alias);
+          sideAliases.push(`/public/${path.basename(alias)}`, `/${path.basename(alias)}`);
+          if (suffix !== '-journal') {
+            const copy = `copied-${suffix.slice(1)}.odd`;
+            for (const directory of ['public', 'dist']) copyFileSync(sidecar, path.join(f.app, directory, copy));
+            sideAliases.push(`/${copy}`);
+          }
+        }
+      }
+      // Same fixture filesystem: this synthetic sidecar deliberately has no format magic.
+      // Its active database sidecar identity must block hard-linked aliases instead.
+      const journal = f.db + '-journal'; writeFileSync(journal, 'SENSITIVE_SYNTHETIC_SIDECAR_WITHOUT_MAGIC');
+      for (const directory of ['public', 'dist']) linkSync(journal, path.join(f.app, directory, 'hidden-sidecar.txt'));
+      sideAliases.push('/hidden-sidecar.txt');
+      for (const directory of ['public', 'dist']) linkSync(f.db, path.join(f.app, directory, 'hardlink.data'));
+      sideAliases.push('/hardlink.data');
+
+      const paths = [
+        '/alias.bin', '/dist/alias.bin', '/public/alias.bin',
+        '/sqlite.png', '/sqlite.js', '/sqlite.bin', '/public/sqlite.png', '/public/sqlite.js', '/public/sqlite.bin',
+        '/sqlite.js?raw', '/sqlite.js?url', '/sqlite.bin?import', '/s%71lite.png',
+        '/src-sqlite.bin', '/@fs' + srcCopy,
+        '/dist/alias.bin?raw', '/dist/alias.bin?url', '/dist/alias.bin?import',
+        '/public/alias.bin?raw', '/public/alias.bin?url', '/public/alias.bin?import',
+        '/%64ist/alias.bin', '/public%2falias.bin', '/dist%2Falias.bin',
+        '/%2e%2e/private/accounts.sqlite', '/%2e%2e%2fprivate%2faccounts.sqlite', '/%2e%2e%5cprivate%5caccounts.sqlite',
+        '/@fs' + f.db, ...sideAliases,
+      ];
+      for (const p of paths) {
+        const response = await get(f.port, p);
+        assert.equal(response.status, 404, `${mode} ${p}: expected 404, received ${response.status}`);
+        assert.equal(response.body.includes(Buffer.from('SQLite format 3')), false, `${mode} ${p}: SQLite header leaked`);
+        assert.equal(response.body.includes(Buffer.from(dbMarker)), false, `${mode} ${p}: DB marker leaked`);
+      }
+    } finally { walHandle?.close(); await stop(child); clean(f); }
+  });
+}

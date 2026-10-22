@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { lstatSync, realpathSync } from 'node:fs';
+import { lstatSync, realpathSync, statSync, openSync, readSync, fstatSync, closeSync, constants } from 'node:fs';
 
 /** Check the original spelling before normalization, including dangling symlinks. */
 export function assertNoSymlinkPath(filename: string) {
@@ -36,19 +36,64 @@ export function assertCreatedDatabasePath(filename: string, applicationRoot: str
   if (!lstatSync(expected).isFile() || realpathSync(expected) !== expected) throw new Error('Created database path differs from validated path');
 }
 
-/** Static responses are a separate boundary: API authorization cannot protect them. */
-export function safeAccountHttpPath(rawUrl: string, applicationRoot: string, localAccounts: boolean) {
+function sqliteHeader(bytes: Buffer, size: number) {
+  if (size >= 16 && bytes.subarray(0, 16).equals(Buffer.from('SQLite format 3\0'))) return true;
+  if (size >= 8 && bytes.subarray(0, 8).equals(Buffer.from('d9d505f920a163d7', 'hex'))) return true; // rollback journal
+  if (size >= 4 && [0x377f0682, 0x377f0683].includes(bytes.readUInt32BE(0))) return true; // WAL
+  // SQLite's shared-memory WAL-index header has version 3007000 in native byte order.
+  return size >= 32 && (bytes.readUInt32LE(0) === 3007000 || bytes.readUInt32BE(0) === 3007000);
+}
+function safeStaticFile(filename: string, rejectSymlinks: boolean, protectedFiles: string[]) {
+  if (rejectSymlinks) assertNoSymlinkPath(filename);
+  let info: ReturnType<typeof statSync>;
+  try { info = statSync(filename); }
+  catch (error) { if (['ENOENT', 'ENOTDIR'].includes((error as NodeJS.ErrnoException).code || '')) return true; throw error; }
+  if (info.isDirectory()) return safeStaticFile(path.join(filename, 'index.html'), rejectSymlinks, protectedFiles);
+  if (!info.isFile()) return false;
+  const canonical = realpathSync(filename);
+  if (/\.(?:sqlite3?|db)(?:[-.].*)?$/i.test(path.basename(canonical))) return false;
+  const privateIdentities = protectedFiles.flatMap(privateFile => {
+    try { return [statSync(privateFile)]; }
+    catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return []; throw error; }
+  });
+  const fd = openSync(canonical, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+  try {
+    const opened = fstatSync(fd);
+    if (!opened.isFile() || opened.dev !== info.dev || opened.ino !== info.ino) return false;
+    if (protectedFiles.includes(canonical) || privateIdentities.some(privateFile => privateFile.dev === opened.dev && privateFile.ino === opened.ino)) return false;
+    const header = Buffer.alloc(32), size = readSync(fd, header, 0, header.length, 0);
+    return !sqliteHeader(header, size);
+  } finally { closeSync(fd); }
+}
+
+/** Validate every filesystem mapping used by production static and Vite, on every request. */
+export function safeAccountHttpPath(rawUrl: string, applicationRoot: string, localAccounts: boolean, database?: string, trustedViteFiles: readonly string[] = []) {
   try {
     if (!rawUrl.startsWith('/') || rawUrl.includes('#')) return false;
     const decoded = decodeURIComponent(rawUrl.split('?')[0]);
     if (decoded.includes('\0') || decoded.includes('\\') || decoded.split('/').some(part => part === '.' || part === '..')) return false;
     if (decoded.split('/').some(part => /\.(?:sqlite3?|db)(?:[-.].*)?$/i.test(part))) return false;
-    if (!localAccounts) return true;
-    if (decoded.includes('%')) return false; // Do not pass double-encoded paths to another decoder.
-    if (/^\/@fs(?:\/|$)/i.test(decoded)) return false;
+    if (localAccounts && decoded.includes('%')) return false; // Do not pass double-encoded paths to another decoder.
     const relative = decoded.replace(/^\/+/, '');
-    for (const directory of ['dist', 'public']) assertNoSymlinkPath(path.join(applicationRoot, directory, relative));
-    return true;
+    const protectedFiles = database ? [database, ...['-wal', '-shm', '-journal'].map(suffix => database + suffix)] : [];
+    if (/^@fs(?:\/|$)/i.test(relative)) {
+      const filename = path.resolve(path.sep, relative.slice(4));
+      // Vite's own env module may be outside root in linked dependency installations.
+      // Exact physical file only, never a directory or an arbitrary user-supplied path.
+      return trustedViteFiles.includes(filename) && realpathSync(filename) === filename && safeStaticFile(filename, true, protectedFiles);
+    }
+    if (/^(?:dist|public)(?:\/|$)/i.test(relative) || relative.startsWith('@/')) return false;
+    // Vite serves app-root URLs too. Prefixing only public/dist checks a different file.
+    // Dependency symlinks are normal dev infrastructure; still inspect their real file and inode.
+    const dependency = relative === 'node_modules' || relative.startsWith('node_modules/');
+    const candidates: [string, boolean][] = [
+      [path.join(applicationRoot, 'dist', relative), true],
+      [path.join(applicationRoot, 'public', relative), true],
+      [path.join(applicationRoot, relative), !dependency],
+      [path.join(applicationRoot, 'dist', 'index.html'), true],
+      [path.join(applicationRoot, 'index.html'), true],
+    ];
+    return candidates.every(([filename, rejectSymlinks]) => safeStaticFile(filename, rejectSymlinks, protectedFiles));
   } catch { return false; }
 }
 
