@@ -9,8 +9,9 @@
     "build": "vite build && node scripts/generate-pwa-sw.mjs && esbuild server.ts --platform=node --format=esm --packages=external --outfile=server.js",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
-    "test": "npm run test:assistant-off && npm run test:assistant-browser && tsx tests/pdf-viewer.test.ts && tsx --test tests/quiz-copy.test.ts && tsx --test tests/ai-ui-copy.test.ts",
+    "test": "npm run test:assistant-off && npm run test:assistant-browser && tsx tests/pdf-viewer.test.ts && tsx --test tests/quiz-copy.test.ts && tsx --test tests/ai-ui-copy.test.ts && npm run test:pwa-browser",
     "lint": "tsc --noEmit",
+    "test:pwa-browser": "node tests/pwa-browser.test.mjs",
     "test:assistant-browser": "node tests/assistant-browser.test.mjs",
     "test:assistant-off": "npm run build && tsx tests/assistant-off.test.ts"
   },
