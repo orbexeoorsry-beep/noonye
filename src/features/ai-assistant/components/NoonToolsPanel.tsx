@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { InteractiveElement, NoonToolType } from '../../../types';
 import { useI18n } from '../../../i18n';
+import { isFeatureEnabled } from '../../../config/feature-flags';
 import {
   Sparkles,
   BookOpen,
@@ -28,7 +29,12 @@ interface NoonToolsPanelProps {
   onQuizCompleted?: (isCorrect: boolean) => void;
 }
 
-export const NoonToolsPanel: React.FC<NoonToolsPanelProps> = ({
+export const NoonToolsPanel: React.FC<NoonToolsPanelProps> = (props) => {
+  if (!isFeatureEnabled('aiAssistantEnabled') || !props.isOpen) return null;
+  return <EnabledNoonToolsPanel {...props} />;
+};
+
+const EnabledNoonToolsPanel: React.FC<NoonToolsPanelProps> = ({
   isOpen,
   onClose,
   selectedElement,
@@ -48,7 +54,7 @@ export const NoonToolsPanel: React.FC<NoonToolsPanelProps> = ({
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
   const [audioSpeed, setAudioSpeed] = useState<number>(1.0);
 
-  if (!isOpen) return null;
+  if (!isFeatureEnabled('aiAssistantEnabled') || !isOpen) return null;
 
   // Active element fallback if nothing selected
   const currentElem = selectedElement || allPageElements[0] || null;
@@ -115,6 +121,10 @@ export const NoonToolsPanel: React.FC<NoonToolsPanelProps> = ({
             <X className="w-5 h-5" />
           </button>
         </div>
+
+        <p role="note" className="px-5 py-3 text-xs bg-amber-50 text-amber-900">
+          {isEnglish ? 'Experimental demo: preset examples, not AI output or a learning assessment. Audio is simulated.' : 'عرض تجريبي: أمثلة معدّة مسبقًا وليست مخرجات ذكاء اصطناعي أو تقييمًا للتعلم. الصوت محاكاة.'}
+        </p>
 
         {/* Currently Inspected Element Strip */}
         <div className="px-5 py-3 bg-slate-50 border-b border-slate-200">
@@ -276,7 +286,7 @@ export const NoonToolsPanel: React.FC<NoonToolsPanelProps> = ({
                   <div className="bg-amber-50/70 border border-amber-200 rounded-2xl p-5">
                     <div className="flex items-center gap-2 text-amber-800 font-bold text-sm mb-2">
                       <Lightbulb className="w-5 h-5 text-amber-600" />
-                      <span>{isEnglish ? 'Smart Guided Hint' : 'تلميح ذكي للوصول للحل'}</span>
+                      <span>{isEnglish ? 'Preset Hint' : 'تلميح معدّ مسبقًا'}</span>
                     </div>
                     <p className="text-sm sm:text-base text-slate-800 leading-relaxed">
                       {currentElem.mockAiAnalysis.hint}
@@ -286,8 +296,8 @@ export const NoonToolsPanel: React.FC<NoonToolsPanelProps> = ({
                   <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-500 leading-relaxed">
                     <span>
                       {isEnglish
-                        ? '💡 Noon Tip: Re-read the problem together with this hint before checking the final answer to strengthen critical thinking.'
-                        : '💡 نصيحة نون: حاول إعادة قراءة المسألة والتلميح معاً قبل الاطلاع على الإجابة النهائية لتنشيط التفكير النقدي.'}
+                        ? 'You can re-read the question and preset hint before viewing the example answer.'
+                        : 'يمكنك إعادة قراءة السؤال والتلميح المعدّ مسبقًا قبل الاطلاع على إجابة المثال.'}
                     </span>
                   </div>
                 </div>
@@ -300,10 +310,10 @@ export const NoonToolsPanel: React.FC<NoonToolsPanelProps> = ({
                     <div className="flex items-center justify-between mb-3 text-xs text-slate-500">
                       <span className="font-bold text-indigo-700 flex items-center gap-1">
                         <CheckSquare className="w-4 h-4" />
-                        <span>{isEnglish ? 'Quick Comprehension Check' : 'اختبار استيعاب سريع'}</span>
+                        <span>{isEnglish ? 'Local Practice Question' : 'سؤال تدريب محلي'}</span>
                       </span>
                       <span className="text-[11px] bg-slate-100 px-2 py-0.5 rounded font-mono">
-                        {isEnglish ? 'Interactive Quiz' : 'سؤال تفاعلي'}
+                        {isEnglish ? 'Preset Practice' : 'تدريب معدّ مسبقًا'}
                       </span>
                     </div>
 
@@ -400,10 +410,10 @@ export const NoonToolsPanel: React.FC<NoonToolsPanelProps> = ({
                     <div className="flex items-center justify-between text-xs text-slate-400 mb-4">
                       <span className="flex items-center gap-1.5 font-medium">
                         <Volume2 className="w-4 h-4 text-indigo-400" />
-                        <span>{isEnglish ? 'Interactive Audio Reader' : 'القراءة الصوتية التفاعلية'}</span>
+                        <span>{isEnglish ? 'Audio Player Demo' : 'عرض تجريبي لمشغل الصوت'}</span>
                       </span>
                       <span className="font-mono text-[11px] bg-slate-800 px-2 py-0.5 rounded text-indigo-300">
-                        {isEnglish ? 'Clear Voice' : 'صوت عربي واضح'}
+                        {isEnglish ? 'No audio output' : 'لا يوجد صوت فعلي'}
                       </span>
                     </div>
 
@@ -448,8 +458,8 @@ export const NoonToolsPanel: React.FC<NoonToolsPanelProps> = ({
 
                   <p className="text-xs text-slate-500 leading-relaxed px-1">
                     {isEnglish
-                      ? 'Audio reading reinforces both visual and auditory focus simultaneously, ideal for reviewing scientific terms.'
-                      : 'القراءة الصوتية تساعد في تعزيز التركيز البصري والسمعي في آن واحد، ومفيدة جداً لمراجعة النصوص العلمية والمصطلحات.'}
+                      ? 'These controls only demonstrate the interface; they do not play audio.'
+                      : 'هذه الأزرار تعرض محاكاة للواجهة فقط ولا تشغّل صوتًا فعليًا.'}
                   </p>
                 </div>
               )}

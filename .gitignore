@@ -6,3 +6,6 @@ coverage/
 *.log
 .env*
 !.env.example
+# Local dependency symlink and generated server output
+node_modules
+server.js

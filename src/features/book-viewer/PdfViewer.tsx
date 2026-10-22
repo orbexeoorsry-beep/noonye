@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Book, InteractiveElement, UserNote } from '../../types';
 import { useI18n } from '../../i18n';
+import { isFeatureEnabled } from '../../config/feature-flags';
 import { pdfService } from '../../services/pdfService';
 import { localDocumentStore } from '../../services/localDocumentStore';
 import { generateEducationalSamplePdf } from '../../services/samplePdfGenerator';
@@ -38,6 +39,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
   onQuizCompleted,
 }) => {
   const { t, format, isRTL } = useI18n();
+  const aiAssistantEnabled = isFeatureEnabled('aiAssistantEnabled');
   const containerRef = useRef<HTMLDivElement>(null);
   const panContainerRef = useRef<HTMLDivElement>(null);
   const canvasMapRef = useRef<Map<number, HTMLCanvasElement>>(new Map());
@@ -489,14 +491,14 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
     );
   }, []);
 
-  // Launch Gemini student quiz for single lesson or multiple selected lessons
+  // Launch local student quiz for single lesson or multiple selected lessons
   const handleStartQuiz = useCallback((lessonsToTest: BookLesson[]) => {
     if (!lessonsToTest || lessonsToTest.length === 0) return;
     setQuizTargetLessons(lessonsToTest);
     setIsLessonQuizOpen(true);
   }, []);
 
-  // Launch Gemini student lesson summary for single or multiple selected lessons
+  // Launch local student lesson summary for single or multiple selected lessons
   const handleStartSummary = useCallback((lessonsToSummarize: BookLesson[]) => {
     if (!lessonsToSummarize || lessonsToSummarize.length === 0) return;
     setSummaryTargetLessons(lessonsToSummarize);
@@ -645,9 +647,10 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
 
   // Element Selection
   const handleSelectElement = useCallback((elem: InteractiveElement) => {
+    if (!aiAssistantEnabled) return;
     setSelectedElement(elem);
     setIsAiToolsOpen(true);
-  }, []);
+  }, [aiAssistantEnabled]);
 
   // Notes
   const handleAddNote = (text: string) => {
@@ -986,7 +989,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
                     isSelectionModeEnabled={isSelectionModeEnabled}
                     selectedElementId={selectedElement?.id || null}
                     onSelectElement={handleSelectElement}
-                    isOverlayEnabled={isOverlayEnabled}
+                    isOverlayEnabled={aiAssistantEnabled && isOverlayEnabled}
                     onPageIntersect={handlePageIntersect}
                     setCanvasRef={handleSetCanvasRef}
                   />
@@ -1007,7 +1010,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
         </div>
 
         {/* Selection-Linked Noon Assistant Panel with Full Lesson Context */}
-        {isSelectionPanelOpen && (
+        {aiAssistantEnabled && isSelectionPanelOpen && (
           <SelectionAssistantPanel
             isOpen={isSelectionPanelOpen}
             onClose={() => setIsSelectionPanelOpen(false)}
@@ -1043,13 +1046,13 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
 
       {/* Noon Tools AI Assistant Sheet / Sidebar */}
       <NoonToolsPanel
-        isOpen={isAiToolsOpen}
+        isOpen={aiAssistantEnabled && isAiToolsOpen}
         onClose={() => setIsAiToolsOpen(false)}
         selectedElement={selectedElement}
         onQuizCompleted={onQuizCompleted}
       />
 
-      {/* Gemini Student Lesson Quiz Modal (Single Lesson or Multiple Lessons) */}
+      {/* Local Student Lesson Quiz Modal (Single Lesson or Multiple Lessons) */}
       <LessonQuizModal
         isOpen={isLessonQuizOpen}
         onClose={() => setIsLessonQuizOpen(false)}
@@ -1059,7 +1062,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
         onQuizCompleted={onQuizCompleted}
       />
 
-      {/* Gemini Student Lesson Summary Modal (Single Lesson or Multiple Lessons) */}
+      {/* Local Student Lesson Summary Modal (Single Lesson or Multiple Lessons) */}
       <LessonSummaryModal
         isOpen={isSummaryOpen}
         onClose={() => setIsSummaryOpen(false)}

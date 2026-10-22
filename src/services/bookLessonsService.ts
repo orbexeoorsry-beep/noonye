@@ -667,17 +667,17 @@ export const bookLessonsService = {
         ],
       },
       {
-        title: `الدرس 6: التقويم الشامل والمراجعة النهائية`,
+        title: `الدرس 6: مراجعة مفاهيم هذا الجزء وتطبيقاته`,
         unit: 'الوحدة الثالثة: التقييم والمراجعة',
-        summary: `مراجعة عامة وتقويم ختامي لكافة موضوعات وأنشطة ${bookTitle}.`,
+        summary: `مراجعة مفاهيم وأمثلة وأنشطة هذا الجزء من كتاب ${bookTitle} فقط.`,
         concepts: [
-          'الإتقان التام لكافة محاور ومفاهيم المنهج واستعداد الاختبارات',
+          'مراجعة محاور ومفاهيم الدرس والأمثلة المرتبطة بها',
         ],
       },
       {
         title: `الدرس 7: نماذج اختبارات وتطبيقات قياس الفهم`,
         unit: 'الوحدة الرابعة: الاختبارات القياسية',
-        summary: `أسئلة قياس مستوى الاستيعاب واختبارات تجريبية وفق معايير جيمني.`,
+        summary: `أمثلة لأسئلة وتمارين محلية للمراجعة.`,
         concepts: [
           'التدرب على الإجابة الدقيقة وإتقان المعايير التعليمية',
         ],
@@ -704,7 +704,9 @@ export const bookLessonsService = {
         unitTitle: template.unit,
         pageNumber: startPage,
         endPageNumber: endPage,
-        summary: template.summary,
+        summary: i === 5
+          ? `${template.summary} يقتصر نطاق المراجعة على الصفحات ${startPage}-${endPage} (${endPage - startPage + 1} من ${total} صفحة).`
+          : template.summary,
         keyConcepts: template.concepts,
         curriculumContext: `حقائق ومعطيات الدرس ${i + 1} لكتاب ${bookTitle}: يغطي هذا الجزء الصفحات من ${startPage} إلى ${endPage} ويتضمن شروحات وتمارين ${subjectName}.`,
       });

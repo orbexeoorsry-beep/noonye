@@ -1261,14 +1261,14 @@ export const lessonSummaryService = {
     }
 
     return {
-      title: isEnglish ? `Comprehensive Summary: ${lesson.title}` : `ملخص شامل: ${lesson.title}`,
+      title: isEnglish ? `Lesson Summary: ${lesson.title}` : `ملخص الدرس: ${lesson.title}`,
       lessonTitles: [lesson.title],
       sourcePages: pageRange,
       overview:
         lesson.summary ||
         (isEnglish
-          ? `Comprehensive study summary covering all concepts and elements of ${lesson.title} from ${cleanBookName} (${pageRange}).`
-          : `ملخص تفصيلي شامل يغطي جميع مفاهيم وعناصر ${lesson.title} من كتاب ${cleanBookName} (${pageRange}).`),
+          ? `Review of the available concepts in ${lesson.title} from ${cleanBookName}, limited to ${pageRange}.`
+          : `مراجعة المفاهيم المتاحة في ${lesson.title} من كتاب ${cleanBookName}، ضمن نطاق ${pageRange} فقط.`),
       sections,
       reviewQuestions,
       quickReview: isEnglish

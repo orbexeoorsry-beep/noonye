@@ -7,7 +7,7 @@ const STANDARD_FONT_DATA_URL = `https://unpkg.com/pdfjs-dist@${PDFJS_VERSION}/st
 // Configure PDF.js worker safely
 if (typeof window !== 'undefined') {
   try {
-    pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${PDFJS_VERSION}/build/pdf.worker.min.mjs`;
+    pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('../../node_modules/pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).href;
   } catch (e) {
     console.warn('PDF.js worker initialization notice', e);
   }
@@ -654,7 +654,7 @@ export const pdfService = {
     const detectedSummary =
       firstMeaningfulLines.length > 0
         ? `${detectedSubject} (${detectedGrade}) — ${firstMeaningfulLines.join(' · ').slice(0, 220)}`
-        : `كتاب ${detectedSubject} (${detectedGrade}) — يضم ${doc.numPages} صفحة جاهزة للقراءة والتحليل البصري والنصي الذكي.`;
+        : `كتاب ${detectedSubject} (${detectedGrade}) — يضم ${doc.numPages} صفحة جاهزة للقراءة.`;
 
     return {
       detectedTitle: metaTitle || undefined,
@@ -666,4 +666,3 @@ export const pdfService = {
     };
   },
 };
-

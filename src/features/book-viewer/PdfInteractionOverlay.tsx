@@ -2,6 +2,7 @@ import React from 'react';
 import { InteractiveElement } from '../../types';
 import { Sparkles, FileText, Image as ImageIcon, Calculator, Table } from 'lucide-react';
 import { useI18n } from '../../i18n';
+import { isFeatureEnabled } from '../../config/feature-flags';
 
 interface OverlayHotspot {
   id: string;
@@ -569,7 +570,7 @@ export const PdfInteractionOverlay: React.FC<PdfInteractionOverlayProps> = ({
     ];
   }, [pageNumber, isEn]);
 
-  if (!isEnabled || width === 0 || height === 0) return null;
+  if (!isFeatureEnabled('aiAssistantEnabled') || !isEnabled || width === 0 || height === 0) return null;
 
   return (
     <div

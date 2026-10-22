@@ -18,7 +18,12 @@ interface LessonSummaryModalProps {
   onJumpToPage?: (pageNumber: number) => void;
 }
 
-export const LessonSummaryModal: React.FC<LessonSummaryModalProps> = ({
+export const LessonSummaryModal: React.FC<LessonSummaryModalProps> = (props) => {
+  if (!isFeatureEnabled('lessonsEnabled') || !isFeatureEnabled('lessonSummaryEnabled') || !props.isOpen) return null;
+  return <EnabledLessonSummaryModal {...props} />;
+};
+
+const EnabledLessonSummaryModal: React.FC<LessonSummaryModalProps> = ({
   isOpen,
   onClose,
   selectedLessons,
@@ -44,16 +49,16 @@ export const LessonSummaryModal: React.FC<LessonSummaryModalProps> = ({
 
   const loadingSteps = isRTL
     ? [
-        'قراءة وتحليل كامل محتوى الصفحات والدروس المحددة...',
-        'تحديد جوهر كل درس واستخلاص الأفكار والمفاهيم الكاملة...',
-        'تنظيم المصطلحات والتعريفات والقوانين والخطوات والأمثلة...',
-        'صياغة أسئلة المراجعة وإعداد الملخص الشامل القابل للتمرير...'
+        'إعداد العرض التجريبي للدروس المحددة...',
+        'تجهيز المحتوى المتاح للمراجعة...',
+        'تجهيز أقسام العرض...',
+        'تجهيز أمثلة المراجعة المتاحة...'
       ]
     : [
-        'Reading and analyzing full page contents and selected lessons...',
-        'Identifying core lesson concepts and full curriculum details...',
-        'Organizing terminology, definitions, formulas, steps, and examples...',
-        'Formulating review Q&A and building the complete scrollable summary...'
+        'Preparing the experimental view for selected lessons...',
+        'Preparing available review content...',
+        'Preparing display sections...',
+        'Preparing available review examples...'
       ];
 
   // Rotate loading steps description
@@ -189,17 +194,17 @@ export const LessonSummaryModal: React.FC<LessonSummaryModalProps> = ({
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <h3 className="text-sm sm:text-base font-bold text-slate-900 font-display">
-                  {isRTL ? 'ملخص مراجعة الدرس الشامل' : 'Comprehensive Lesson Summary'}
+                  {isRTL ? 'ملخص مراجعة تجريبي' : 'Experimental Review Summary'}
                 </h3>
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-700 flex items-center gap-1 font-sans">
                   <AppIcon name="sparkles" size="xs" />
-                  {isRTL ? 'تلخيص جيمني الذكي' : 'Gemini Summary'}
+                  {isRTL ? 'ملخص محلي (تجريبي)' : 'Local Summary (Experimental)'}
                 </span>
               </div>
               <p className="text-[11px] text-slate-500 truncate font-sans mt-0.5">
                 {selectedLessons.length === 1
                   ? selectedLessons[0].title
-                  : `${isRTL ? 'ملخص تفصيلي شامل لعدد' : 'Complete summary of'} ${selectedLessons.length} ${isRTL ? 'دروس محددة' : 'selected lessons'}`}
+                  : `${isRTL ? 'عرض تجريبي لعدد' : 'Experimental view of'} ${selectedLessons.length} ${isRTL ? 'دروس محددة' : 'selected lessons'}`}
               </p>
             </div>
           </div>
@@ -213,6 +218,12 @@ export const LessonSummaryModal: React.FC<LessonSummaryModalProps> = ({
             className="min-h-[40px] min-w-[40px] text-slate-400 hover:text-slate-700 shrink-0"
           />
         </header>
+
+        <p role="note" className="shrink-0 px-4 sm:px-6 py-2 text-xs bg-amber-50 text-amber-900">
+          {isRTL
+            ? 'عرض مراجعة تجريبي، وليس مخرجات ذكاء اصطناعي أو تقييمًا للتعلم أو ضمانًا لتغطية المنهج. راجع المحتوى مع كتابك.'
+            : 'Experimental review, not AI output, a learning assessment, or a guarantee of curriculum coverage. Check it against your textbook.'}
+        </p>
 
         {/* ========================================================= */}
         {/* Quick Section Navigation Bar (when summary is ready) */}
@@ -261,7 +272,7 @@ export const LessonSummaryModal: React.FC<LessonSummaryModalProps> = ({
               </div>
               <div className="space-y-2 max-w-sm">
                 <h4 className="text-sm sm:text-base font-bold text-slate-800 font-display">
-                  {isRTL ? 'جاري إعداد الملخص الدراسي الشامل...' : 'Preparing Complete Study Summary...'}
+                  {isRTL ? 'جاري إعداد العرض التجريبي...' : 'Preparing Experimental Review...'}
                 </h4>
                 <p className="text-xs text-slate-500 min-h-[36px] leading-relaxed animate-pulse">
                   {loadingSteps[loadingStep]}
@@ -522,7 +533,7 @@ export const LessonSummaryModal: React.FC<LessonSummaryModalProps> = ({
                             <div className="mt-3 pt-3 border-t border-slate-100 pr-8">
                               <div className="bg-indigo-50/60 border border-indigo-100/80 rounded-xl p-3">
                                 <span className="text-[11px] font-bold text-indigo-800 block mb-1">
-                                  {isRTL ? 'الإجابة النموذجية:' : 'Model Answer:'}
+                                  {isRTL ? 'إجابة للمراجعة:' : 'Review Answer:'}
                                 </span>
                                 <p className="text-xs sm:text-sm text-slate-800 font-medium font-sans leading-relaxed whitespace-pre-line">
                                   {q.answer}
@@ -599,8 +610,8 @@ export const LessonSummaryModal: React.FC<LessonSummaryModalProps> = ({
                 ? `يحتوي الملخص على ${visibleSections.length} أقسام علمية و ${summary.reviewQuestions?.length || 0} أسئلة مراجعة`
                 : `${visibleSections.length} sections & ${summary.reviewQuestions?.length || 0} review questions`
               : isRTL
-              ? 'ملخص شامل قابل للتمرير حتى النهاية'
-              : 'Scrollable comprehensive summary'}
+              ? 'عرض مراجعة تجريبي قابل للتمرير'
+              : 'Scrollable experimental review'}
           </div>
 
           <div className="flex items-center gap-2">
