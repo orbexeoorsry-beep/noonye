@@ -1,8 +1,9 @@
 import { DatabaseSync } from 'node:sqlite';
 import { randomBytes, randomUUID, scrypt as scryptCallback, timingSafeEqual, createHash } from 'node:crypto';
 import { promisify } from 'node:util';
-import { mkdirSync, chmodSync, openSync, closeSync } from 'node:fs';
+import { mkdirSync, fchmodSync, openSync, closeSync, constants } from 'node:fs';
 import path from 'node:path';
+import { localDatabasePath, assertCreatedDatabasePath } from './config';
 
 const scrypt = promisify(scryptCallback);
 export type Role = 'school_admin' | 'teacher' | 'student';
@@ -43,13 +44,19 @@ function member(row: UserRow): Member { return { id: row.id, username: row.usern
 /** Local single-process repository. Accounts belong to exactly one school in this slice. */
 export class AccountStore {
   readonly db: DatabaseSync;
-  constructor(filename: string) {
+  constructor(filename: string, applicationRoot?: string) {
+    if (applicationRoot) localDatabasePath(filename, applicationRoot);
     if (filename !== ':memory:') {
       mkdirSync(path.dirname(filename), { recursive: true, mode: 0o700 });
-      const fd = openSync(filename, 'a', 0o600); closeSync(fd); chmodSync(filename, 0o600);
+      const fd = openSync(filename, constants.O_RDWR | constants.O_CREAT | constants.O_NOFOLLOW, 0o600);
+      try { fchmodSync(fd, 0o600); } finally { closeSync(fd); }
+      if (applicationRoot) assertCreatedDatabasePath(filename, applicationRoot);
     }
     this.db = new DatabaseSync(filename);
-    if (filename !== ':memory:') chmodSync(filename, 0o600);
+    if (applicationRoot) {
+      try { assertCreatedDatabasePath(filename, applicationRoot); }
+      catch (error) { this.db.close(); throw error; }
+    }
     const version = Number((this.db.prepare('PRAGMA user_version').get() as {user_version:number}).user_version);
     if (version > 1) { this.db.close(); throw new AccountError('unsupported_schema_version', 500); }
     this.db.exec(`PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;

@@ -1,4 +1,6 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, realpathSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { AccountStore } from '../server/features/accounts/store';
 import { localDatabasePath } from '../server/features/accounts/config';
 
@@ -11,9 +13,10 @@ if (!schoolSlug || !schoolName || !username || !displayName || process.argv.leng
 process.umask(0o077);
 let store: AccountStore | undefined;
 try {
-  const database = localDatabasePath(process.env.NOON_LOCAL_ACCOUNTS_DB);
+  const applicationRoot = path.resolve(path.dirname(realpathSync(fileURLToPath(import.meta.url))), '..');
+  const database = localDatabasePath(process.env.NOON_LOCAL_ACCOUNTS_DB, applicationRoot);
   const password = readFileSync(0, 'utf8').replace(/\r?\n$/, '');
-  store = new AccountStore(database);
+  store = new AccountStore(database, applicationRoot);
   const result = await store.bootstrapSchool(schoolSlug, schoolName, username, password, displayName);
   console.log(JSON.stringify({ schoolId: result.schoolId, schoolSlug, adminUsername: username }));
 } catch {

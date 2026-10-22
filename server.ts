@@ -2,14 +2,14 @@ import express, { Request, Response } from 'express';
 import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { readFileSync } from 'node:fs';
+import { readFileSync, realpathSync } from 'node:fs';
 import dotenv from 'dotenv';
-import { accountsConfig } from './server/features/accounts/config';
+import { accountsConfig, safeAccountHttpPath } from './server/features/accounts/config';
 import { AccountStore } from './server/features/accounts/store';
 import { createAccountsRouter } from './server/features/accounts/router';
 dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const __dirname = path.dirname(realpathSync(__filename));
 
 async function startServer() {
   const app = express();
@@ -18,9 +18,15 @@ async function startServer() {
   app.post('/api/assistant/explain', (_req: Request, res: Response) => {
     res.status(503).type('text/plain').send('Assistant unavailable');
   });
-  const accounts = accountsConfig();
+  const accounts = accountsConfig(process.env, __dirname);
   if (accounts.enabled) process.umask(0o077);
-  const accountStore = accounts.enabled ? new AccountStore(accounts.database!) : undefined;
+  const accountStore = accounts.enabled ? new AccountStore(accounts.database!, __dirname) : undefined;
+  app.use((req, res, next) => {
+    if (!safeAccountHttpPath(req.originalUrl, __dirname, accounts.enabled)) {
+      res.status(404).set('Cache-Control', 'no-store').type('text/plain').send('Not found'); return;
+    }
+    next();
+  });
   app.use('/api', createAccountsRouter({ ...accounts, store: accountStore }));
   app.use(express.json({ limit: '5mb' }));
   app.get('/api/health', (_req: Request, res: Response) => {
@@ -41,7 +47,7 @@ async function startServer() {
       res.sendFile(path.resolve(__dirname, 'dist', 'index.html'));
     });
   } else {
-    const vite = await createViteServer({ server: { middlewareMode: true }, appType: 'spa' });
+    const vite = await createViteServer({ root: __dirname, server: { middlewareMode: true, fs: { strict: true, allow: [__dirname] } }, appType: 'spa' });
     app.get(['/accounts', '/accounts/'], async (_req: Request, res: Response, next) => {
       try {
         const html = accountShell(readFileSync(path.resolve(__dirname, 'index.html'), 'utf8'));
