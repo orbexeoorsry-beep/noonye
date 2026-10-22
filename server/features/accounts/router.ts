@@ -2,6 +2,7 @@ import express, { type Request, type Response, type NextFunction } from 'express
 import { timingSafeEqual } from 'node:crypto';
 import { AccountError, AccountStore, csrfFor, validateCredentials } from './store';
 import { ClassroomStore } from '../classrooms/store';
+import { DashboardStore } from '../dashboards/store';
 
 export interface AccountsOptions { store?: AccountStore; origin: string; enabled: boolean }
 const COOKIE = 'noon_local_session';
@@ -16,6 +17,7 @@ function equal(a: string, b: string) {
 export function createAccountsRouter({ store, origin, enabled }: AccountsOptions) {
   const router = express.Router();
   const classrooms = enabled && store ? new ClassroomStore(store) : undefined;
+  const dashboards = enabled && store ? new DashboardStore(store) : undefined;
   const host = new URL(origin).host;
   const attempts = new Map<string, { count: number; until: number }>();
   router.use((req, res, next) => {
@@ -58,6 +60,7 @@ export function createAccountsRouter({ store, origin, enabled }: AccountsOptions
     res.status(201).json({ member: await classrooms!.acceptInvitation(req.body) });
   }));
   router.get('/accounts/me', run((req, res) => res.json(store!.identity(token(req)))));
+  router.get('/accounts/dashboard', run((req, res) => res.json(dashboards!.get(token(req)))));
   router.post('/accounts/logout', run((req, res) => {
     store!.logout(mutation(req));
     res.clearCookie(COOKIE, { httpOnly: true, sameSite: 'strict', path: '/api' });
@@ -68,6 +71,16 @@ export function createAccountsRouter({ store, origin, enabled }: AccountsOptions
   router.get('/schools/:schoolId/classes', run((req, res) => res.json({ classes: classrooms!.listSchoolClasses(token(req), req.params.schoolId) })));
   router.post('/schools/:schoolId/classes', run((req, res) => res.status(201).json({ classroom: classrooms!.createClass(mutation(req), req.params.schoolId, req.body) })));
   router.get('/accounts/classes', run((req, res) => res.json({ classes: classrooms!.listClasses(token(req)) })));
+  router.patch('/classes/:classId', run((req, res) => res.json({ classroom: dashboards!.rename(mutation(req), req.params.classId, req.body) })));
+  router.get('/classes/:classId/members', run((req, res) => res.json({ members: dashboards!.listMembers(token(req), req.params.classId) })));
+  router.post('/classes/:classId/members', run((req, res) => {
+    const result = dashboards!.addMember(mutation(req), req.params.classId, req.body);
+    res.status(result.replay ? 200 : 201).json({ membership: result.membership });
+  }));
+  router.delete('/classes/:classId/members/:userId', run((req, res) => {
+    dashboards!.removeMember(mutation(req), req.params.classId, req.params.userId);
+    res.status(204).end();
+  }));
   router.post('/classes/:classId/invitations', run((req, res) => res.status(201).json(classrooms!.createInvitation(mutation(req), req.params.classId, req.body))));
   router.get('/classes/:classId/readings', run((req, res) => res.json({ readings: classrooms!.listReadings(token(req), req.params.classId) })));
   router.post('/classes/:classId/readings', run((req, res) => res.status(201).json({ reading: classrooms!.createReading(mutation(req), req.params.classId, req.body) })));
