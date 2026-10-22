@@ -34,6 +34,26 @@ test('dashboard and class roster contracts: scoped SQL counts, membership change
     };
     await mount();
     const request = (route: string, init: RequestInit = {}) => fetch(`${origin}/api${route}`, init);
+    const get = async (route: string, init: RequestInit = {}) => {
+      assert.equal(init.method === undefined || init.method === 'GET', true, 'bounded retry helper is GET-only');
+      const deadline = Date.now() + 3000;
+      for (let attempt = 0; ; attempt++) {
+        try { return await request(route, { ...init, method: 'GET' }); }
+        catch (error) {
+          let current: any = error;
+          let transport = false;
+          for (let depth = 0; current && depth < 5; depth++, current = current.cause) {
+            if (['UND_ERR_SOCKET', 'ECONNRESET', 'ECONNREFUSED'].includes(current.code)) transport = true;
+          }
+          if (!transport || attempt >= 5 || Date.now() >= deadline) throw error;
+          await new Promise(resolve => setTimeout(resolve, Math.min(100, Math.max(1, deadline - Date.now()))));
+        }
+      }
+    };
+    const ready = async () => {
+      const response = await get('/accounts/dashboard', { headers: auth(admin.cookie) });
+      assert.equal(response.status, 200);
+    };
     const json = (value: unknown) => ({ headers: { 'content-type': 'application/json' }, body: JSON.stringify(value) });
     const login = async (slug: string, username: string, password: string) => {
       const response = await request('/accounts/login', { method: 'POST', ...json({ schoolSlug: slug, username, password }), headers: { ...json({}).headers, Origin: origin } });
@@ -46,6 +66,7 @@ test('dashboard and class roster contracts: scoped SQL counts, membership change
     const auth = (cookie: string, csrf?: string) => ({ Cookie: cookie, Origin: origin, ...(csrf ? { 'x-csrf-token': csrf } : {}) });
     const admin = await login('dash-cedar', 'cedar-admin', 'cedar-admin-password');
     const mapleAdmin = await login('dash-maple', 'maple-admin', 'maple-admin-password');
+    await ready();
     const createClass = async (schoolId: string, authData: typeof admin, name: string) => {
       const r = await request(`/schools/${schoolId}/classes`, { method: 'POST', ...json({ name }), headers: { ...auth(authData.cookie, authData.csrf), ...json({}).headers } });
       assert.equal(r.status, 201);
@@ -82,7 +103,7 @@ test('dashboard and class roster contracts: scoped SQL counts, membership change
     const empty = await request('/accounts/dashboard');
     assert.equal(empty.status, 401);
     const blankDash = async (credentials: typeof admin) => {
-      const response = await request('/accounts/dashboard', { headers: auth(credentials.cookie) });
+      const response = await get('/accounts/dashboard', { headers: auth(credentials.cookie) });
       assert.equal(response.status, 200);
       return response.json() as Promise<any>;
     };
@@ -177,6 +198,11 @@ test('dashboard and class roster contracts: scoped SQL counts, membership change
     assert.equal((await blankDash(admin)).classes.find((c:any)=>c.id===classA.id).name, 'Cedar A updated');
 
     const withdraw = async (classId: string, userId: string) => request(`/classes/${classId}/members/${userId}`, { method: 'DELETE', headers: { ...auth(admin.cookie, admin.csrf) } });
+    const completionHistory = async (credentials: typeof admin) => {
+      const response = await get(`/readings/${reading.id}/completions`, { headers: auth(credentials.cookie) });
+      assert.equal(response.status, 200);
+      return (await response.json() as any).completions;
+    };
     assert.equal((await withdraw(foreignClass.id, student.id)).status, 403);
     assert.equal((await withdraw(classA.id, teacher.id)).status, 204);
     const withdrawnTeacher = await blankDash(teacherLogin);
@@ -185,6 +211,7 @@ test('dashboard and class roster contracts: scoped SQL counts, membership change
     assert.equal((await request(`/classes/${classA.id}/members`, { headers: auth(teacherLogin.cookie) })).status, 403);
     assert.equal((await request(`/classes/${classA.id}/readings`, {headers:auth(teacherLogin.cookie)})).status,403);
     assert.equal((await request(`/readings/${reading.id}/completions`, {headers:auth(teacherLogin.cookie)})).status,403);
+    assert.equal((await completionHistory(teacherBLogin)).some((c: any) => c.id === completionBody.id), true);
     assert.equal((await withdraw(classA.id, student.id)).status, 204);
     const withdrawnStudent = await blankDash(studentLogin);
     assert.equal(withdrawnStudent.stats.readings, 0);
@@ -192,11 +219,23 @@ test('dashboard and class roster contracts: scoped SQL counts, membership change
     assert.equal(withdrawnStudent.completions.length, 0);
     assert.equal((await complete(studentLogin, uuid(2))).status,403);
     assert.equal((await request(`/readings/${reading.id}/completions`, {headers:auth(studentLogin.cookie)})).status,403);
+    for (const credentials of [teacherBLogin, admin]) {
+      const history = await completionHistory(credentials);
+      assert.deepEqual(history, []);
+      const dashboard = await blankDash(credentials);
+      assert.equal(dashboard.completions.some((c: any) => c.id === completionBody.id), false);
+      assert.equal(dashboard.stats.completions, history.length);
+      assert.equal(dashboard.classes.find((c: any) => c.id === classA.id).completionCount, history.length);
+    }
     assert.equal(store.db.prepare('SELECT count(*) AS n FROM completions WHERE id=?').get(completionBody.id)?.n, 1);
     assert.equal((await addMember(admin, classA.id, student.id)).status, 201);
     const restoredStudent = await blankDash(studentLogin);
     assert.equal(restoredStudent.stats.completions, 1);
     assert.equal(restoredStudent.stats.completionPercent, 100);
+    assert.deepEqual((await completionHistory(teacherBLogin)).map((c: any) => c.id), [completionBody.id]);
+    assert.equal(store.db.prepare('SELECT count(*) AS n FROM completions WHERE id=?').get(completionBody.id)?.n, 1);
+    assert.equal((await blankDash(admin)).completions.filter((c: any) => c.id === completionBody.id).length, 1);
+    assert.equal((await blankDash(teacherBLogin)).completions.filter((c: any) => c.id === completionBody.id).length, 1);
 
     // Memberships and completion history are durable in the local SQLite database.
     await new Promise<void>(resolve => server!.close(() => resolve()));
@@ -204,10 +243,12 @@ test('dashboard and class roster contracts: scoped SQL counts, membership change
     store.close();
     store = new AccountStore(database);
     await mount();
+    await ready();
     const persisted = await blankDash(admin);
     assert.equal(persisted.stats.completions, 1);
     assert.equal(persisted.completions.some((c: any) => c.id === completionBody.id), true);
     assert.equal((await blankDash(studentLogin)).stats.completions, 1);
+    assert.deepEqual((await completionHistory(teacherBLogin)).map((c: any) => c.id), [completionBody.id]);
   } finally {
     if (server?.listening) await new Promise<void>(resolve => server!.close(() => resolve()));
     try { store.close(); } catch { /* the store was closed before SQLite reopen */ }

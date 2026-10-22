@@ -46,9 +46,38 @@ test('role dashboards: real school management, scoped histories, SQL progress, r
   async function reading(page:Page,title:string,from:string,to:string){await page.getByPlaceholder('عنوان القراءة',{exact:true}).fill(title);await page.getByLabel('من صفحة',{exact:true}).fill(from);await page.getByLabel('إلى صفحة',{exact:true}).fill(to);const wait=page.waitForResponse(r=>r.url().endsWith('/readings')&&r.request().method()==='POST');await page.getByRole('button',{name:'إسناد قراءة للفصل',exact:true}).click();const r=await wait;assert.equal(r.status(),201);const data=await r.json();await page.locator(`[data-reading-id="${data.reading.id}"]`).waitFor();return data.reading;}
   async function reloadClass(page:Page,classId:string){await page.reload();await page.getByTestId('class-selector').selectOption(classId);}
   async function capture(page:Page,name:string){const folder=process.env.DASHBOARD_PREVIEW_EVIDENCE;if(!folder)return;mkdirSync(folder,{recursive:true});await page.evaluate(()=>window.scrollTo(0,0));await page.screenshot({path:path.join(folder,name),fullPage:true});}
+  async function rejectMalformedAdminSnapshots(page:Page) {
+    // Negative tests only: corrupt a real synthetic response, never a preview/success state.
+    const corruptions: Array<[string,(body:any)=>void]> = [
+      ['missing members',body=>{delete body.members;}],
+      ['missing memberships',body=>{delete body.memberships;}],
+      ['non-array members',body=>{body.members={};}],
+      ['null memberships',body=>{body.memberships=null;}],
+      ['null member',body=>{body.members=[null];}],
+      ['null membership',body=>{body.memberships=[null];}],
+      ['invalid member role',body=>{body.members[0].role='school_admin';}],
+      ['invalid membership ID',body=>{body.memberships[0].userId='not-an-id';}],
+      ['invalid member name',body=>{body.members[0].displayName=null;}],
+    ];
+    for (const [name,corrupt] of corruptions) {
+      await page.route('**/api/accounts/dashboard',async route=>{
+        const response=await route.fetch(),body=await response.json();
+        corrupt(body);
+        await route.fulfill({response,json:body});
+      });
+      await page.getByTestId('dashboard-refresh').click();
+      await page.getByRole('alert').filter({hasText:'استجابة بيانات اللوحة غير صالحة'}).waitFor();
+      assert.equal(await page.getByTestId('dashboard-stat-members').count(),0,name);
+      assert.equal(await page.getByTestId('member-selector').count(),0,name);
+      await page.unroute('**/api/accounts/dashboard');
+      await page.getByRole('button',{name:'إعادة المحاولة',exact:true}).click();
+      await stat(page,'members',4);
+    }
+  }
   try{
     await start();browser=await chromium.launch({headless:true,executablePath:process.env.CHROMIUM_EXECUTABLE_PATH||'/usr/bin/chromium',args:['--no-sandbox','--disable-dev-shm-usage']});
     const adminCtx=await context(),admin=await signIn(adminCtx,'role-admin');await admin.getByTestId('admin-dashboard').waitFor();await stat(admin,'classes',1);await stat(admin,'members',4);
+    await rejectMalformedAdminSnapshots(admin);
     await admin.getByPlaceholder('الاسم الظاهر',{exact:true}).fill('طالب اصطناعي غير مسند');await admin.getByPlaceholder('اسم المستخدم',{exact:true}).fill('role-unassigned');await admin.getByPlaceholder('كلمة المرور',{exact:true}).fill(password);await admin.getByRole('button',{name:'إنشاء الحساب',exact:true}).click();await stat(admin,'students',3);await stat(admin,'members',5);
     await admin.getByPlaceholder('اسم الفصل',{exact:true}).fill('فصل العرض المحلي');const classWait=admin.waitForResponse(r=>r.url().endsWith('/classes')&&r.request().method()==='POST');await admin.getByRole('button',{name:'إنشاء فصل',exact:true}).click();const classroom=(await(await classWait).json()).classroom;await stat(admin,'classes',2);
     await admin.getByTestId('class-selector').selectOption(classroom.id);await admin.getByTestId('rename-class-input').fill('الفصل التجريبي — بيانات اصطناعية');await admin.getByTestId('rename-class-button').click();

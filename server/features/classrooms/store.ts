@@ -118,8 +118,15 @@ export class ClassroomStore {
     const teacher=actor.role==='teacher'&&this.accounts.db.prepare("SELECT 1 FROM class_members WHERE class_id=? AND user_id=? AND role='teacher'").get(reading.class_id,actor.user.id);
     const student=actor.role==='student'&&this.accounts.db.prepare("SELECT 1 FROM class_members WHERE class_id=? AND user_id=? AND role='student'").get(reading.class_id,actor.user.id);
     if(!teacher&&!student&&actor.role!=='school_admin') throw new AccountError('forbidden',403);
-    const rows=this.accounts.db.prepare('SELECT id,reading_id,student_id,completed_at FROM completions WHERE reading_id=? ORDER BY completed_at,id').all(readingId) as any[];
-    const visible=student?rows.filter(r=>r.student_id===actor.user.id):rows;
-    return visible.map(r=>({id:r.id,readingId:r.reading_id,studentId:r.student_id,completedAt:r.completed_at}));
+    // This is a current-membership view, not an archive. Preserve historical rows
+    // in SQLite but never return a withdrawn student's completion through it.
+    const rows=this.accounts.db.prepare(`SELECT x.id,x.reading_id,x.student_id,x.completed_at
+      FROM completions x JOIN readings r ON r.id=x.reading_id
+      JOIN classes c ON c.id=r.class_id
+      JOIN class_members m ON m.class_id=r.class_id AND m.user_id=x.student_id AND m.role='student'
+      JOIN users u ON u.id=x.student_id AND u.school_id=c.school_id
+      WHERE x.reading_id=? AND c.school_id=? ${student?'AND x.student_id=?':''}
+      ORDER BY x.completed_at,x.id`).all(readingId,actor.school.id,...(student?[actor.user.id]:[])) as any[];
+    return rows.map(r=>({id:r.id,readingId:r.reading_id,studentId:r.student_id,completedAt:r.completed_at}));
   }
 }

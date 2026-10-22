@@ -24,11 +24,36 @@ test('accounts HTTP slice: auth, memberships, classes, invitations, readings, co
     const port = address.port;
     await new Promise<void>(resolve => probe.close(() => resolve()));
     const origin = `http://127.0.0.1:${port}`;
-    const app = express();
-    app.use('/api', createAccountsRouter({ store, origin, enabled: true }));
-    server = app.listen(port, '127.0.0.1');
-    await new Promise<void>((resolve, reject) => { server!.once('listening', resolve); server!.once('error', reject); });
+    const mount = async () => {
+      const app = express();
+      app.use('/api', createAccountsRouter({ store, origin, enabled: true }));
+      server = app.listen(port, '127.0.0.1');
+      await new Promise<void>((resolve, reject) => { server!.once('listening', resolve); server!.once('error', reject); });
+    };
+    await mount();
     const request = (route: string, init: RequestInit = {}) => fetch(`${origin}/api${route}`, init);
+    const get = async (route: string, init: RequestInit = {}) => {
+      assert.equal(init.method === undefined || init.method === 'GET', true, 'bounded retry helper is GET-only');
+      const deadline = Date.now() + 3000;
+      for (let attempt = 0; ; attempt++) {
+        try { return await request(route, { ...init, method: 'GET' }); }
+        catch (error) {
+          let current: any = error;
+          let transport = false;
+          for (let depth = 0; current && depth < 5; depth++, current = current.cause) {
+            if (['UND_ERR_SOCKET', 'ECONNRESET', 'ECONNREFUSED'].includes(current.code)) transport = true;
+          }
+          if (!transport || attempt >= 5 || Date.now() >= deadline) throw error;
+          await new Promise(resolve => setTimeout(resolve, Math.min(100, Math.max(1, deadline - Date.now()))));
+        }
+      }
+    };
+    const ready = async (headers?: HeadersInit) => {
+      const response = await get('/accounts/status', { headers });
+      assert.equal(response.status, 200);
+      await response.arrayBuffer();
+    };
+    await ready();
     const json = (value: unknown) => ({ headers: { 'content-type': 'application/json' }, body: JSON.stringify(value) });
     const login = async (schoolSlug: string, username: string, password: string) => {
       const response = await request('/accounts/login', { method: 'POST', ...json({ schoolSlug, username, password }), headers: { ...json({ schoolSlug, username, password }).headers, Origin: origin } });
@@ -220,14 +245,15 @@ test('accounts HTTP slice: auth, memberships, classes, invitations, readings, co
     resumed.use('/api', createAccountsRouter({ store, origin, enabled: true }));
     server = resumed.listen(port, '127.0.0.1');
     await new Promise<void>((resolve, reject) => { server!.once('listening', resolve); server!.once('error', reject); });
-    const restored = await request('/accounts/me', { headers: authHeaders(sessionCookie) });
+    await ready(authHeaders(sessionCookie));
+    const restored = await get('/accounts/me', { headers: authHeaders(sessionCookie) });
     assert.equal(restored.status, 200);
     assert.equal((await restored.json() as any).user.id, student.id);
-    const persistedCompletions = await request(`/readings/${reading.id}/completions`, { headers: authHeaders(teacherCookie) });
+    const persistedCompletions = await get(`/readings/${reading.id}/completions`, { headers: authHeaders(teacherCookie) });
     assert.ok((await persistedCompletions.json() as any).completions.some((item: any) => item.id === completion.id));
     const logout = await request('/accounts/logout', { method: 'POST', headers: authHeaders(sessionCookie, studentCsrf) });
     assert.equal(logout.status, 204);
-    assert.equal((await request('/accounts/me', { headers: authHeaders(sessionCookie) })).status, 401);
+    assert.equal((await get('/accounts/me', { headers: authHeaders(sessionCookie) })).status, 401);
   } finally {
     if (server?.listening) await new Promise<void>(resolve => server!.close(() => resolve()));
     try { store.close(); } catch { /* closed before reopening */ }

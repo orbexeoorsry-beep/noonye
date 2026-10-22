@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import type { Me } from './api';
 import { readableError, request } from './api';
+import { parseDashboard } from './dashboardValidation';
 
 export type DashboardClass = { id: string; name: string; teacherCount?: number; studentCount?: number; readingCount: number; completionCount: number };
 export type DashboardReading = { id: string; classId: string; className: string; title: string; pagesFrom: number; pagesTo: number; createdAt: number; authorName: string; completedAt: number | null };
@@ -28,13 +29,12 @@ export function useDashboard(me: Me, onSessionExpired: () => void) {
       if (!alive.current || aborter.signal.aborted) return;
       if (response.status === 401) { onSessionExpired(); return; }
       if (!response.ok) throw new Error('network_error');
-      const result = await response.json() as Dashboard;
-      const requiredStats = me.role === 'school_admin' ? ['classes', 'teachers', 'students', 'members', 'readings', 'completions'] : me.role === 'teacher' ? ['classes', 'students', 'readings', 'completions'] : ['classes', 'readings', 'completions', 'pending', 'completionPercent'];
-      const validStats = result && result.role === me.role && result.stats && requiredStats.every((key) => Number.isInteger(result.stats[key]) && result.stats[key] >= 0) && (me.role !== 'student' || result.stats.completionPercent <= 100);
-      if (!validStats || !Array.isArray(result.classes) || !Array.isArray(result.readings) || !Array.isArray(result.completions)) throw new Error('network_error');
+      const payload: unknown = await response.json();
+      const result = parseDashboard(payload, me.role);
+      if (!result) throw new Error('dashboard_invalid');
       if (alive.current && !aborter.signal.aborted) setData(result);
     } catch (reason) {
-      if (alive.current && !aborter.signal.aborted) setError(readableError(reason instanceof Error ? reason.message : 'network_error'));
+      if (alive.current && !aborter.signal.aborted) setError(reason instanceof Error && reason.message === 'dashboard_invalid' ? 'استجابة بيانات اللوحة غير صالحة؛ أعد المحاولة.' : readableError(reason instanceof Error ? reason.message : 'network_error'));
     } finally {
       if (alive.current && !aborter.signal.aborted) setLoading(false);
     }
