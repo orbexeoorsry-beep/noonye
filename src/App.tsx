@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { AccountsPage } from './features/accounts/AccountsPage';
 import { ActivePage, Book, StudentProgress } from './types';
 import { storageService } from './services/storage';
 import { AdminBookStore } from './services/adminBookStore';
@@ -14,7 +15,7 @@ import { AddBook } from './pages/AddBook';
 import { BookViewerPage } from './pages/BookViewerPage';
 import { ProgressPage } from './pages/ProgressPage';
 
-export default function App() {
+function LibraryApp() {
   const localBooksAllowed = isFeatureEnabled('localBooksEnabled');
   const [activePage, setActivePage] = useState<ActivePage>('home');
   const [books, setBooks] = useState<Book[]>(() => {
@@ -292,3 +293,11 @@ export default function App() {
   );
 }
 
+
+
+export default function App() {
+  if (typeof window !== 'undefined' && (window.location.pathname === '/accounts' || window.location.pathname === '/accounts/')) {
+    return <AccountsPage />;
+  }
+  return <LibraryApp />;
+}

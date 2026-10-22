@@ -9,3 +9,10 @@ coverage/
 # Local dependency symlink and generated server output
 node_modules
 server.js
+
+# Account databases and journals are private runtime data, never source artifacts.
+*.sqlite
+*.sqlite-*
+*.db
+*.db-*
+test-evidence/

@@ -5,7 +5,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { mkdtemp, cp, readFile, writeFile, mkdir, rm } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
-const evidence = path.resolve(process.env.PWA_EVIDENCE || '/workspace/noonye-pwa-evidence-20261022');
+const evidence = path.resolve(process.env.PWA_EVIDENCE || 'test-evidence/pwa');
 await mkdir(evidence, { recursive:true });
 const tmp = await mkdtemp(path.join(os.tmpdir(),'noon-pwa-test-'));
 const A=path.join(tmp,'A'), B=path.join(tmp,'B');

@@ -3,13 +3,19 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "engines": {
+    "node": ">=24.0.0"
+  },
   "scripts": {
     "dev": "tsx server.ts",
     "start": "tsx server.ts",
-    "build": "vite build && node scripts/generate-pwa-sw.mjs && esbuild server.ts --platform=node --format=esm --packages=external --outfile=server.js",
+    "build": "vite build && node scripts/generate-pwa-sw.mjs && esbuild server.ts --bundle --platform=node --format=esm --packages=external --outfile=server.js",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
-    "test": "npm run test:assistant-off && npm run test:assistant-browser && tsx tests/pdf-viewer.test.ts && tsx --test tests/quiz-copy.test.ts && tsx --test tests/ai-ui-copy.test.ts && npm run test:pwa-browser",
+    "test": "npm run test:accounts && npm run test:assistant-off && npm run test:accounts-browser && npm run test:assistant-browser && tsx tests/pdf-viewer.test.ts && tsx --test tests/quiz-copy.test.ts && tsx --test tests/ai-ui-copy.test.ts && npm run test:pwa-browser",
+    "test:accounts": "tsx --test tests/accounts.test.ts tests/accounts-config.test.ts tests/accounts-security.test.ts",
+    "test:accounts-browser": "tsx --test tests/accounts-browser.test.ts",
+    "accounts:bootstrap": "tsx scripts/bootstrap-school.ts",
     "lint": "tsc --noEmit",
     "test:pwa-browser": "node tests/pwa-browser.test.mjs",
     "test:assistant-browser": "node tests/assistant-browser.test.mjs",
