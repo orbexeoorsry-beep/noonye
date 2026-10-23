@@ -4,45 +4,62 @@ import { AccountError, AccountStore, csrfFor, validateCredentials } from './stor
 import { ClassroomStore } from '../classrooms/store';
 import { DashboardStore } from '../dashboards/store';
 
-export interface AccountsOptions { store?: AccountStore; origin: string; enabled: boolean }
-const COOKIE = 'noon_local_session';
-function sessionToken(req: Request) {
-  const values = (req.headers.cookie || '').split(';').map(v => v.trim()).filter(v => v.startsWith(`${COOKIE}=`));
-  return values.length === 1 ? values[0].slice(COOKIE.length + 1) : '';
+export interface AccountsOptions { store?: AccountStore; origin: string; enabled: boolean; mode?: 'proxy-production'; proxyAddress?: string }
+function sessionToken(req: Request, cookie: string) {
+  const values = (req.headers.cookie || '').split(';').map(v => v.trim()).filter(v => v.startsWith(`${cookie}=`));
+  return values.length === 1 ? values[0].slice(cookie.length + 1) : '';
 }
 function equal(a: string, b: string) {
   const x = Buffer.from(a), y = Buffer.from(b);
   return x.length === y.length && timingSafeEqual(x, y);
 }
-export function createAccountsRouter({ store, origin, enabled }: AccountsOptions) {
+export function createAccountsRouter({ store, origin, enabled, mode, proxyAddress }: AccountsOptions) {
   const router = express.Router();
   const classrooms = enabled && store ? new ClassroomStore(store) : undefined;
   const dashboards = enabled && store ? new DashboardStore(store) : undefined;
   const host = new URL(origin).host;
+  const production = mode === 'proxy-production';
+  if (production && (new URL(origin).protocol !== 'https:' || proxyAddress !== '127.0.0.1')) throw new Error('Verified HTTPS loopback proxy required');
+  const cookie = production ? '__Host-noon_session' : 'noon_local_session';
+  const cookieOptions = { httpOnly: true, sameSite: 'strict' as const, path: production ? '/' : '/api', secure: production };
+  const session = (req: Request) => sessionToken(req, cookie);
   const attempts = new Map<string, { count: number; until: number }>();
   router.use((req, res, next) => {
     if (!/^\/(accounts|schools|classes|readings)(\/|$)/.test(req.path)) { next('router'); return; }
     res.set({ 'Cache-Control': 'no-store', 'Pragma': 'no-cache', 'X-Content-Type-Options': 'nosniff', 'Vary': 'Cookie, Origin' });
+    if (production) {
+      const peer = req.socket.remoteAddress?.replace(/^::ffff:/, '');
+      if (peer !== proxyAddress || req.get('x-forwarded-proto') !== 'https' || !req.secure ||
+          (req.get('x-forwarded-host') && req.get('x-forwarded-host') !== host)) {
+        res.status(403).json({ error: 'https_proxy_required' }); return;
+      }
+      res.set('Strict-Transport-Security', 'max-age=31536000');
+    }
+    if (req.get('sec-fetch-site') === 'cross-site') { res.status(403).json({ error: 'origin_rejected' }); return; }
     if (req.method === 'GET' && req.path === '/accounts/status') {
-      res.json({ enabled, mode: enabled ? 'local-only' : 'disabled' }); return;
+      res.json({ enabled, mode: enabled ? (production ? 'proxy-production' : 'local-only') : 'disabled' }); return;
     }
     if (!enabled || !store || !classrooms) { res.status(503).json({ error: 'accounts_disabled' }); return; }
-    // Local-only binding plus exact Host prevents DNS rebinding; no trust in forwarded headers.
+    // Raw Host is checked, never req.hostname (which may use X-Forwarded-Host).
     if (req.headers.host !== host || (req.headers.origin && req.headers.origin !== origin)) { res.status(403).json({ error: 'origin_rejected' }); return; }
     if (!['GET', 'HEAD'].includes(req.method) && req.headers.origin !== origin) { res.status(403).json({ error: 'origin_rejected' }); return; }
     next();
   });
   router.use(express.json({ limit: '8kb', strict: true }));
   const run = (fn: (req: Request, res: Response) => unknown) => (req: Request, res: Response, next: NextFunction) => Promise.resolve().then(() => fn(req, res)).catch(next);
-  function token(req: Request) { const value = sessionToken(req); store!.identity(value); return value; }
+  function token(req: Request) { const value = session(req); store!.identity(value); return value; }
   function mutation(req: Request) {
     const value = token(req);
     if (!equal(req.get('x-csrf-token') || '', csrfFor(value))) throw new AccountError('csrf_rejected', 403);
     return value;
   }
   function throttle(req: Request) {
-    const now = Date.now(), key = req.socket.remoteAddress || 'local';
+    const now = Date.now(), key = production ? req.ip || 'unknown' : req.socket.remoteAddress || 'local';
     const entry = attempts.get(key);
+    if (!entry && attempts.size >= 1024) {
+      for (const [address, attempt] of attempts) if (attempt.until <= now) attempts.delete(address);
+      if (attempts.size >= 1024) throw new AccountError('try_later', 429);
+    }
     if (!entry || entry.until <= now) { attempts.set(key, { count: 1, until: now + 15 * 60 * 1000 }); return; }
     if (++entry.count > 30) throw new AccountError('try_later', 429);
   }
@@ -50,9 +67,9 @@ export function createAccountsRouter({ store, origin, enabled }: AccountsOptions
     throttle(req);
     const value = validateCredentials(req.body);
     const fresh = await store!.login(value.schoolSlug as string, value.username as string, value.password as string);
-    const old = sessionToken(req);
+    const old = session(req);
     if (old) store!.logout(old);
-    res.cookie(COOKIE, fresh, { httpOnly: true, sameSite: 'strict', path: '/api', maxAge: 8 * 60 * 60 * 1000 });
+    res.cookie(cookie, fresh, { ...cookieOptions, maxAge: 8 * 60 * 60 * 1000 });
     res.json(store!.identity(fresh));
   }));
   router.post('/accounts/accept-invite', run(async (req, res) => {
@@ -63,7 +80,7 @@ export function createAccountsRouter({ store, origin, enabled }: AccountsOptions
   router.get('/accounts/dashboard', run((req, res) => res.json(dashboards!.get(token(req)))));
   router.post('/accounts/logout', run((req, res) => {
     store!.logout(mutation(req));
-    res.clearCookie(COOKIE, { httpOnly: true, sameSite: 'strict', path: '/api' });
+    res.clearCookie(cookie, cookieOptions);
     res.status(204).end();
   }));
   router.get('/schools/:schoolId/members', run((req, res) => res.json({ members: store!.listMembers(token(req), req.params.schoolId) })));

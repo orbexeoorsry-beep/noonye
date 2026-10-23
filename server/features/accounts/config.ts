@@ -1,5 +1,6 @@
 import path from 'node:path';
 import { lstatSync, realpathSync, statSync, openSync, readSync, fstatSync, closeSync, constants } from 'node:fs';
+import { getuid } from 'node:process';
 
 /** Check the original spelling before normalization, including dangling symlinks. */
 export function assertNoSymlinkPath(filename: string) {
@@ -22,12 +23,42 @@ export function localDatabasePath(filename: string | undefined, applicationRoot:
   if (!applicationRoot || !path.isAbsolute(applicationRoot)) throw new Error('A trusted absolute application root is required');
   assertNoSymlinkPath(filename);
   const resolved = path.resolve(filename), app = realpathSync(applicationRoot);
-  if (resolved === app || resolved.startsWith(app + path.sep)) throw new Error('Database must be outside application and static asset directories');
+  const forbidden = new Set(['hbuilds', 'public_html', 'webroot', 'releases']);
+  const components = resolved.split(path.sep).filter(Boolean);
+  if (components.some(part => forbidden.has(part.toLowerCase())) || resolved === app || resolved.startsWith(app + path.sep)) throw new Error('Database must be outside application, build, and served asset directories');
   try {
     const info = lstatSync(resolved);
-    if (!info.isFile() || realpathSync(resolved) !== resolved) throw new Error('Database must be a regular canonical non-symlink file');
+    if (!info.isFile() || realpathSync(resolved) !== resolved || info.nlink !== 1) throw new Error('Database must be a regular canonical non-symlink unaliased file');
   } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
+  for (const suffix of ['-wal', '-shm', '-journal']) {
+    try {
+      const sidecar = lstatSync(resolved + suffix);
+      if (!sidecar.isFile() || sidecar.isSymbolicLink() || sidecar.nlink !== 1 || realpathSync(resolved + suffix) !== resolved + suffix) throw new Error('Unsafe SQLite sidecar');
+    } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
+  }
   return resolved;
+}
+
+/** Strict optional production path: validates only; caller must create nothing through this helper. */
+export function productionDatabasePath(filename: string | undefined, storageRoot: string | undefined, applicationRoot: string) {
+  if (!filename || !storageRoot || !path.isAbsolute(storageRoot) || !path.isAbsolute(applicationRoot) || path.basename(filename) !== filename || !/^[^/\\]+\.sqlite$/.test(filename)) throw new Error('Expected a direct-child .sqlite filename and trusted absolute roots');
+  assertNoSymlinkPath(storageRoot);
+  if (typeof getuid !== 'function') throw new Error('POSIX ownership checks required');
+  const owner = getuid();
+  const root = realpathSync(storageRoot), app = realpathSync(applicationRoot);
+  const dirInfo = lstatSync(storageRoot);
+  if (!dirInfo.isDirectory() || dirInfo.isSymbolicLink() || root !== storageRoot || dirInfo.uid !== owner || (dirInfo.mode & 0o777) !== 0o700) throw new Error('Storage root must be a canonical private directory owned by current user with mode 0700');
+  const forbidden = new Set(['hbuilds', 'public_html', 'webroot', 'releases']);
+  const components = root.split(path.sep).filter(Boolean);
+  if (root === app || root.startsWith(app + path.sep) || components.some(part => forbidden.has(part.toLowerCase()))) throw new Error('Storage root is under application or served/build directories');
+  const target = path.join(root, filename);
+  for (const candidate of [target, ...['-wal', '-shm', '-journal'].map(s => target + s)]) {
+    try {
+      const info = lstatSync(candidate);
+      if (!info.isFile() || info.isSymbolicLink() || info.uid !== owner || info.nlink !== 1 || (info.mode & 0o777) !== 0o600 || realpathSync(candidate) !== candidate) throw new Error('Unsafe database or sidecar file');
+    } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
+  }
+  return target;
 }
 
 /** Revalidate the created file as well, before SQLite initialization and before HTTP listen. */

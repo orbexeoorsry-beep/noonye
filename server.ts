@@ -4,11 +4,10 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { readFileSync, realpathSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import dotenv from 'dotenv';
-import { accountsConfig, safeAccountHttpPath, assertNoSymlinkPath } from './server/features/accounts/config';
+import { safeAccountHttpPath, assertNoSymlinkPath } from './server/features/accounts/config';
+import { accountsRuntimeConfig, configureAccountsProxy } from './server/features/accounts/runtime';
 import { AccountStore } from './server/features/accounts/store';
 import { createAccountsRouter } from './server/features/accounts/router';
-dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(realpathSync(__filename));
 
@@ -19,7 +18,8 @@ async function startServer() {
   app.post('/api/assistant/explain', (_req: Request, res: Response) => {
     res.status(503).type('text/plain').send('Assistant unavailable');
   });
-  const accounts = accountsConfig(process.env, __dirname);
+  const accounts = accountsRuntimeConfig(process.env, __dirname);
+  configureAccountsProxy(app, 'proxyAddress' in accounts ? accounts.proxyAddress : undefined);
   if (accounts.enabled) process.umask(0o077);
   const accountStore = accounts.enabled ? new AccountStore(accounts.database!, __dirname) : undefined;
   const trustedViteFiles: string[] = [];
@@ -65,7 +65,7 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   }
-  // The account slice is intentionally unavailable on public interfaces, even in production builds.
+  // Both account modes bind loopback only; a production proxy must share this host/network.
   const server = app.listen(PORT, accounts.enabled ? '127.0.0.1' : '0.0.0.0', () => console.log(`Server running on port ${PORT}`));
   const shutdown = () => server.close(() => { accountStore?.close(); process.exit(0); });
   process.once('SIGTERM', shutdown);
