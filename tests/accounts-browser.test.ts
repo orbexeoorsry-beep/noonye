@@ -59,7 +59,9 @@ test('real browser: persisted classroom completion, lost response retry, indepen
   }
   async function signIn(ctx: BrowserContext, username: string) {
     const page = await ctx.newPage();
-    await page.goto(`${origin}/accounts`);
+    const navigation = await page.goto(`${origin}/accounts`);
+    const csp = navigation!.headers()['content-security-policy'];
+    assert.equal(csp.split(';').map(x => x.trim()).find(x => x.startsWith('script-src ')), "script-src 'self'");
     const result = await page.evaluate(async ({ username, password }) => {
       const response = await fetch('/api/accounts/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ schoolSlug: 'browser-school', username, password }) });
       return response.status;
@@ -67,6 +69,14 @@ test('real browser: persisted classroom completion, lost response retry, indepen
     assert.equal(result, 200);
     await page.reload();
     await page.getByTestId('accounts-workspace').waitFor();
+    const inlineExecuted = await page.evaluate(() => {
+      const script = document.createElement('script');
+      script.textContent = 'globalThis.__noonSyntheticInlineProbe = true';
+      document.head.appendChild(script);
+      script.remove();
+      return '__noonSyntheticInlineProbe' in globalThis;
+    });
+    assert.equal(inlineExecuted, false, 'production CSP must block inline script execution');
     return page;
   }
   try {

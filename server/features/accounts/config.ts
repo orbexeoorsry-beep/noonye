@@ -48,6 +48,13 @@ export function productionDatabasePath(filename: string | undefined, storageRoot
   const root = realpathSync(storageRoot), app = realpathSync(applicationRoot);
   const dirInfo = lstatSync(storageRoot);
   if (!dirInfo.isDirectory() || dirInfo.isSymbolicLink() || root !== storageRoot || dirInfo.uid !== owner || (dirInfo.mode & 0o777) !== 0o700) throw new Error('Storage root must be a canonical private directory owned by current user with mode 0700');
+  // A private child can still be renamed through an unsafe parent. Sticky /tmp is allowed;
+  // each ancestor must be owned by this uid or root. Same-uid races remain out of scope.
+  for (let ancestor = path.dirname(root); ; ancestor = path.dirname(ancestor)) {
+    const info = lstatSync(ancestor);
+    if ((info.uid !== owner && info.uid !== 0) || ((info.mode & 0o022) !== 0 && (info.mode & 0o1000) === 0)) throw new Error('Unsafe writable or untrusted storage ancestor');
+    if (ancestor === path.parse(ancestor).root) break;
+  }
   const forbidden = new Set(['hbuilds', 'public_html', 'webroot', 'releases']);
   const components = root.split(path.sep).filter(Boolean);
   if (root === app || root.startsWith(app + path.sep) || components.some(part => forbidden.has(part.toLowerCase()))) throw new Error('Storage root is under application or served/build directories');

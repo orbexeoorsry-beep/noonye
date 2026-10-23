@@ -8,6 +8,7 @@ import { safeAccountHttpPath, assertNoSymlinkPath } from './server/features/acco
 import { accountsRuntimeConfig, configureAccountsProxy } from './server/features/accounts/runtime';
 import { AccountStore } from './server/features/accounts/store';
 import { createAccountsRouter } from './server/features/accounts/router';
+import { accountPageHeaders } from './server/features/accounts/http-policy';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(realpathSync(__filename));
 
@@ -42,11 +43,7 @@ async function startServer() {
     res.json({ status: 'ok', assistantAvailable: false });
   });
   const accountShell = (html: string) => html.replace(/<link\b[^>]*https:\/\/fonts\.(?:googleapis|gstatic)\.com[^>]*>/g, '');
-  const accountHeaders = {
-    'Cache-Control': 'no-store',
-    'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self'; connect-src 'self'; img-src 'self' data: blob:; worker-src 'self' blob:; frame-ancestors 'none'; form-action 'self'; base-uri 'none'",
-    'Referrer-Policy': 'no-referrer',
-  };
+  const accountHeaders = accountPageHeaders(process.env.NODE_ENV === 'production');
   if (process.env.NODE_ENV === 'production') {
     app.get(['/accounts', '/accounts/'], (_req: Request, res: Response) => {
       res.set(accountHeaders).type('html').send(accountShell(readFileSync(path.resolve(__dirname, 'dist/index.html'), 'utf8')));

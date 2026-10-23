@@ -13,6 +13,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import * as net from 'node:net';
 import { tmpdir } from 'node:os';
+import { AccountStore } from '../server/features/accounts/store';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const serverBundle = path.join(repo, 'server.js');
@@ -114,10 +115,11 @@ async function waitForServer(child: ChildProcess, port: number): Promise<void> {
 }
 function createMarkedDatabase(filename: string): void {
   mkdirSync(path.dirname(filename), { recursive: true });
-  const db = new DatabaseSync(filename);
+  const store = new AccountStore(filename);
+  const db = store.db;
   db.exec('CREATE TABLE evidence (marker TEXT);');
   db.prepare('INSERT INTO evidence VALUES (?)').run(dbMarker);
-  db.close();
+  store.close();
 }
 function clean(f: Fixture): void { rmSync(f.base, { recursive: true, force: true }); }
 

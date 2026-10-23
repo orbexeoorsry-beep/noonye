@@ -54,3 +54,21 @@ test('production path requires private canonical owned mode-0700 root and valida
     assert.equal(getuid?.(), lstatSync(root).uid);
   } finally { rmSync(temp, { recursive: true, force: true }); }
 });
+
+test('private storage rejects replaceable writable ancestors and parent symlinks, but accepts sticky temporary parents', () => {
+  const temp = mkdtempSync(path.join(tmpdir(), 'noon-ancestor-'));
+  try {
+    const app = path.join(temp, 'app'); mkdirSync(app);
+    const parent = path.join(temp, 'parent'); mkdirSync(parent);
+    const root = path.join(parent, 'private'); mkdirSync(root, { mode: 0o700 });
+    chmodSync(parent, 0o777);
+    assert.throws(() => productionDatabasePath('synthetic.sqlite', root, app), /ancestor/);
+    chmodSync(parent, 0o770);
+    assert.throws(() => productionDatabasePath('synthetic.sqlite', root, app), /ancestor/);
+    chmodSync(parent, 0o1777);
+    assert.equal(productionDatabasePath('synthetic.sqlite', root, app), path.join(root, 'synthetic.sqlite'));
+    chmodSync(parent, 0o700);
+    const alias = path.join(temp, 'alias'); symlinkSync(parent, alias);
+    assert.throws(() => productionDatabasePath('synthetic.sqlite', path.join(alias, 'private'), app));
+  } finally { rmSync(temp, { recursive: true, force: true }); }
+});

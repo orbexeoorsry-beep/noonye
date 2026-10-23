@@ -57,9 +57,21 @@ export class AccountStore {
       try { assertCreatedDatabasePath(filename, applicationRoot); }
       catch (error) { this.db.close(); throw error; }
     }
-    const version = Number((this.db.prepare('PRAGMA user_version').get() as {user_version:number}).user_version);
-    if (version > 1) { this.db.close(); throw new AccountError('unsupported_schema_version', 500); }
-    this.db.exec(`PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;
+    let transaction = false;
+    try {
+      this.db.exec('PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000; BEGIN IMMEDIATE');
+      transaction = true;
+      const version = Number((this.db.prepare('PRAGMA user_version').get() as {user_version:number}).user_version);
+      if (version !== 0 && version !== 1) throw new AccountError('unsupported_schema_version', 500);
+      if (version === 0 && this.db.prepare("SELECT 1 FROM sqlite_schema WHERE name NOT GLOB 'sqlite_*' LIMIT 1").get()) throw new AccountError('unversioned_schema_requires_migration', 500);
+      if (version === 1) {
+        // Compatibility guard, not a migration or a proof of all constraints.
+        try {
+          this.db.prepare('SELECT id,slug,name FROM schools LIMIT 0').all();
+          this.db.prepare('SELECT id,school_id,username,display_name,password_hash,role FROM users LIMIT 0').all();
+          this.db.prepare('SELECT token_hash,user_id,expires_at FROM sessions LIMIT 0').all();
+        } catch { throw new AccountError('unsupported_schema_shape', 500); }
+      } else this.db.exec(`
       CREATE TABLE IF NOT EXISTS schools (id TEXT PRIMARY KEY, slug TEXT NOT NULL UNIQUE, name TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS users (
         id TEXT PRIMARY KEY, school_id TEXT NOT NULL REFERENCES schools(id),
@@ -72,6 +84,12 @@ export class AccountStore {
         expires_at INTEGER NOT NULL
       );
       PRAGMA user_version = 1;`);
+      this.db.exec('COMMIT');
+      transaction = false;
+    } catch (error) {
+      try { if (transaction) this.db.exec('ROLLBACK'); } finally { this.db.close(); }
+      throw error;
+    }
   }
   close() { this.db.close(); }
   async bootstrapSchool(slug: string, name: string, username: string, password: string, displayName: string) {
