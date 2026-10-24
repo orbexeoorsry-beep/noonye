@@ -6,6 +6,9 @@
   "engines": {
     "node": "^22.13.0 || >=24.0.0"
   },
+  "overrides": {
+    "body-parser": "1.20.9"
+  },
   "scripts": {
     "dev": "tsx server.ts",
     "start": "tsx server.ts",
