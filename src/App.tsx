@@ -1,9 +1,12 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { AccountsPage } from './features/accounts/AccountsPage';
 import { ActivePage, Book, StudentProgress } from './types';
-import { storageService } from './services/storage';
-import { AdminBookStore } from './services/adminBookStore';
-import { localDocumentStore } from './services/localDocumentStore';
+import { fetchAuthenticatedUserId } from './features/accounts/sessionIdentity';
+import { subscribeToSchoolSessionChanges } from './features/accounts/sessionSignals';
+import {
+  SchoolLibrarySessionController,
+  type AccountLibraryScope,
+} from './services/accountLibraryScope';
 import { INITIAL_ADMIN_BOOKS } from './mock-data/books';
 import { isFeatureEnabled } from './config/feature-flags';
 import { Header } from './components/common/Header';
@@ -15,20 +18,14 @@ import { AddBook } from './pages/AddBook';
 import { BookViewerPage } from './pages/BookViewerPage';
 import { ProgressPage } from './pages/ProgressPage';
 
-function LibraryApp() {
+function LibraryApp({ scope }: { scope: AccountLibraryScope }) {
   const localBooksAllowed = isFeatureEnabled('localBooksEnabled');
   const [activePage, setActivePage] = useState<ActivePage>('home');
-  const [books, setBooks] = useState<Book[]>(() => {
-    const all = storageService.getBooks();
-    return localBooksAllowed ? all : all.filter((b) => b.source === 'admin');
-  });
-  const [progress, setProgress] = useState<StudentProgress>(() => storageService.getProgress());
-  const [activeBookId, setActiveBookId] = useState<string>(() => {
-    const initial = storageService
-      .getBooks()
-      .filter((b) => localBooksAllowed || b.source === 'admin');
-    return initial.length > 0 ? initial[0].id : INITIAL_ADMIN_BOOKS[0].id;
-  });
+  const [books, setBooks] = useState<Book[]>(() => scope.adminBooks.getBooks());
+  const [progress, setProgress] = useState<StudentProgress>(() => scope.storage.getProgress());
+  const [activeBookId, setActiveBookId] = useState<string>(
+    () => scope.adminBooks.getBooks()[0]?.id || INITIAL_ADMIN_BOOKS[0].id
+  );
 
   // Guard direct URL links (pathname, hash, or search params) for disabled features
   useEffect(() => {
@@ -71,36 +68,29 @@ function LibraryApp() {
     };
   }, []);
 
-  // Sync books with AdminBookStore and IndexedDB LocalDocumentStore on startup
+  // Sync only the authenticated account's document database with the admin catalog.
   useEffect(() => {
+    let cancelled = false;
     async function syncBooks() {
-      // 1. Curated Admin Books
-      const adminBooks = AdminBookStore.getBooks();
-
+      const adminBooks = scope.adminBooks.getBooks();
+      setBooks(adminBooks);
       if (!isFeatureEnabled('localBooksEnabled')) {
-        setBooks(adminBooks);
         return;
       }
 
-      // 2. Synchronize with IndexedDB documents for local user books
       try {
-        const idbLocalBooks = await localDocumentStore.getLocalBooks();
-        if (idbLocalBooks.length > 0) {
-          storageService.saveLocalBooks(idbLocalBooks);
-          const combined = [...adminBooks, ...idbLocalBooks];
-          setBooks(combined);
-          return;
-        }
+        const accountBooks = await scope.documents.getLocalBooks();
+        if (!cancelled) setBooks([...adminBooks, ...accountBooks]);
       } catch (e) {
-        console.warn('Could not sync local books from IndexedDB', e);
+        if (!cancelled) console.warn('Could not sync account documents', e);
       }
-
-      const cached = storageService.getBooks();
-      setBooks(cached);
     }
 
-    syncBooks();
-  }, []);
+    void syncBooks();
+    return () => {
+      cancelled = true;
+    };
+  }, [scope]);
 
   const handleNavigate = useCallback((page: ActivePage) => {
     if (page === 'add-book' && !isFeatureEnabled('localBooksEnabled')) {
@@ -126,42 +116,41 @@ function LibraryApp() {
   );
 
   const handleOpenBookToPage = useCallback((bookId: string, pageNumber: number) => {
-    const allBooks = storageService.getBooks();
-    const target = allBooks.find((b) => b.id === bookId);
+    const target = books.find((b) => b.id === bookId);
     if (target && target.source === 'local' && !isFeatureEnabled('localBooksEnabled')) {
       return;
     }
     setActiveBookId(bookId);
-    storageService.updateBookPage(bookId, pageNumber);
-    const nextBooks = storageService.getBooks();
-    setBooks(
-      isFeatureEnabled('localBooksEnabled')
-        ? nextBooks
-        : nextBooks.filter((b) => b.source === 'admin')
-    );
+    if (scope.adminBooks.isAdminBook(bookId)) {
+      scope.adminBooks.updateBookPage(bookId, pageNumber);
+    } else {
+      void scope.documents.saveLastPage(bookId, pageNumber);
+    }
+    setBooks((previous) => previous.map((book) =>
+      book.id === bookId ? { ...book, currentPage: pageNumber } : book
+    ));
     setActivePage('viewer');
     window.scrollTo({ top: 0, behavior: 'smooth' });
-  }, []);
+  }, [books, scope]);
 
   const handleAddBook = useCallback((newBook: Book) => {
     if (!isFeatureEnabled('localBooksEnabled')) return;
-    const updated = storageService.addBook(newBook);
-    setBooks(updated);
+    setBooks((previous) => [newBook, ...previous.filter((book) => book.id !== newBook.id)]);
   }, []);
 
   const handleDeleteBook = useCallback(async (bookId: string) => {
     if (!isFeatureEnabled('localBooksEnabled')) return;
     // Admin books can NEVER be deleted
-    if (AdminBookStore.isAdminBook(bookId)) {
+    if (scope.adminBooks.isAdminBook(bookId)) {
       return;
     }
 
     try {
-      await localDocumentStore.deleteDocument(bookId);
+      await scope.documents.deleteDocument(bookId);
     } catch (e) {
       console.warn('Failed to delete book from IndexedDB', e);
     }
-    const updated = storageService.deleteBook(bookId);
+    const updated = books.filter((book) => book.id !== bookId);
     setBooks(updated);
     setActiveBookId((prev) => {
       if (prev === bookId) {
@@ -170,25 +159,26 @@ function LibraryApp() {
       return prev;
     });
     setActivePage('library');
-  }, []);
+  }, [books, scope]);
 
   const handleClearAllLocalBooks = useCallback(async () => {
     if (!isFeatureEnabled('localBooksEnabled')) return;
     try {
-      await localDocumentStore.clearAllDocuments();
+      await scope.documents.clearAllDocuments();
     } catch (e) {
       console.warn('Failed to clear documents from IndexedDB', e);
     }
-    storageService.saveLocalBooks([]);
-    const adminBooks = AdminBookStore.getBooks();
+    const adminBooks = scope.adminBooks.getBooks();
     setBooks(adminBooks);
     if (adminBooks.length > 0) {
       setActiveBookId(adminBooks[0].id);
     }
-  }, []);
+  }, [scope]);
 
   const handleUpdatePageNumber = useCallback((bookId: string, pageNumber: number) => {
-    storageService.updateBookPage(bookId, pageNumber);
+    if (scope.adminBooks.isAdminBook(bookId)) {
+      scope.adminBooks.updateBookPage(bookId, pageNumber);
+    }
     setBooks((prevBooks) => {
       const target = prevBooks.find((b) => b.id === bookId);
       if (target && target.currentPage === pageNumber) {
@@ -203,10 +193,10 @@ function LibraryApp() {
         ...prev,
         totalPagesRead: prev.totalPagesRead + 1,
       };
-      storageService.saveProgress(updatedProgress);
+      scope.storage.saveProgress(updatedProgress);
       return updatedProgress;
     });
-  }, []);
+  }, [scope]);
 
   const handleQuizCompleted = useCallback((isCorrect: boolean) => {
     setProgress((prev) => {
@@ -220,10 +210,10 @@ function LibraryApp() {
         quizzesCompleted: newTotal,
         quizzesAccuracy: newAccuracy,
       };
-      storageService.saveProgress(updatedProgress);
+      scope.storage.saveProgress(updatedProgress);
       return updatedProgress;
     });
-  }, []);
+  }, [scope]);
 
   const activeBook = books.find((b) => b.id === activeBookId) || books[0] || INITIAL_ADMIN_BOOKS[0];
 
@@ -260,6 +250,7 @@ function LibraryApp() {
             onAddBook={handleAddBook}
             onOpenBook={handleOpenBook}
             onNavigate={handleNavigate}
+            documents={scope.documents}
           />
         )}
 
@@ -270,6 +261,8 @@ function LibraryApp() {
             onDeleteBook={isFeatureEnabled('localBooksEnabled') ? handleDeleteBook : undefined}
             onUpdatePageNumber={handleUpdatePageNumber}
             onQuizCompleted={handleQuizCompleted}
+            documents={scope.documents}
+            storage={scope.storage}
           />
         )}
 
@@ -293,11 +286,101 @@ function LibraryApp() {
   );
 }
 
+type LibraryGateState =
+  | { status: 'loading' }
+  | { status: 'locked'; message: string }
+  | { status: 'ready'; userId: string; scope: AccountLibraryScope };
 
+function AuthenticatedLibraryGate() {
+  const controllerRef = useRef<SchoolLibrarySessionController>(
+    new SchoolLibrarySessionController()
+  );
+  const controller = controllerRef.current;
+  const requestEpoch = useRef(0);
+  const [gate, setGate] = useState<LibraryGateState>({ status: 'loading' });
+
+  const lock = useCallback((message: string) => {
+    requestEpoch.current += 1;
+    controller.invalidate();
+    setGate({ status: 'locked', message });
+  }, [controller]);
+
+  const refreshSession = useCallback(async () => {
+    const epoch = ++requestEpoch.current;
+    if (!controller.currentScope) setGate({ status: 'loading' });
+    try {
+      const userId = await fetchAuthenticatedUserId();
+      if (epoch !== requestEpoch.current) return;
+      if (!userId) {
+        lock('تحتاج المكتبة إلى جلسة مدرسة نشطة. سجّل الدخول لمتابعة الوصول إلى ملفاتك.');
+        return;
+      }
+      const scope = controller.activate(userId);
+      setGate({ status: 'ready', userId, scope });
+    } catch {
+      if (epoch !== requestEpoch.current) return;
+      lock('تعذر التحقق من جلسة المدرسة. أُقفلت المكتبة محليًا حتى ينجح التحقق.');
+    }
+  }, [controller, lock]);
+
+  useEffect(() => {
+    void refreshSession();
+    const unsubscribe = subscribeToSchoolSessionChanges(() => {
+      lock('تغيّرت الجلسة؛ جارٍ التحقق قبل فتح المكتبة مجددًا.');
+      void refreshSession();
+    });
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        lock('جارٍ إعادة التحقق من الجلسة قبل عرض المكتبة.');
+        void refreshSession();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void refreshSession();
+    }, 60_000);
+
+    return () => {
+      unsubscribe();
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      window.clearInterval(timer);
+      requestEpoch.current += 1;
+      controller.invalidate();
+    };
+  }, [controller, lock, refreshSession]);
+
+  if (gate.status === 'ready') {
+    return <LibraryApp key={gate.userId} scope={gate.scope} />;
+  }
+
+  if (gate.status === 'loading') {
+    return <main dir="rtl" lang="ar" className="min-h-screen bg-slate-50 p-8 text-slate-700">جارٍ التحقق من جلسة المدرسة…</main>;
+  }
+
+  return (
+    <main dir="rtl" lang="ar" className="min-h-screen bg-slate-50 p-8 text-slate-900">
+      <section className="mx-auto max-w-xl rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <h1 className="text-xl font-bold">المكتبة مقفلة</h1>
+        <p role="status" className="mt-3 leading-7 text-slate-700">{gate.message}</p>
+        <div className="mt-5 flex flex-wrap gap-3">
+          <button type="button" onClick={() => void refreshSession()} className="rounded-lg bg-indigo-700 px-4 py-2 font-semibold text-white">
+            إعادة التحقق
+          </button>
+          <a href="/accounts" className="rounded-lg border border-slate-300 px-4 py-2 font-semibold text-slate-700">
+            تسجيل الدخول
+          </a>
+        </div>
+      </section>
+    </main>
+  );
+}
 
 export default function App() {
-  if (typeof window !== 'undefined' && (window.location.pathname === '/accounts' || window.location.pathname === '/accounts/')) {
+  if (
+    typeof window !== 'undefined' &&
+    (window.location.pathname === '/accounts' || window.location.pathname === '/accounts/')
+  ) {
     return <AccountsPage />;
   }
-  return <LibraryApp />;
+  return <AuthenticatedLibraryGate />;
 }

@@ -1,125 +1,146 @@
 import { AdminBook } from '../types';
 import { INITIAL_ADMIN_BOOKS } from '../mock-data/books';
+import { accountStorageKey, type AuthenticatedUserId } from './accountScope';
 
-const ADMIN_STORAGE_KEYS = {
-  ADMIN_BOOKS_STATE: 'noon_admin_books_state_v1',
+const LEGACY_ADMIN_BOOKS_STATE_KEY = 'noon_admin_books_state_v1';
+
+type AdminBookProgress = {
+  currentPage?: number;
+  progressPercent?: number;
+  lastOpened?: string;
 };
 
-const adminMemoryStorage = new Map<string, string>();
+type AdminBookState = Record<string, AdminBookProgress>;
+type AdminStorageAdapter = Pick<Storage, 'getItem' | 'setItem'>;
 
-const safeAdminStorage = {
-  getItem(key: string): string | null {
+export interface AccountAdminBookStore {
+  getBooks(): AdminBook[];
+  getBookById(bookId: string): AdminBook | null;
+  updateBookPage(bookId: string, pageNumber: number): void;
+  isAdminBook(bookId: string): boolean;
+  clearMemoryCache(): void;
+  revoke(): void;
+}
+
+function createAdminBookStore(
+  storageKey: string,
+  adapter?: AdminStorageAdapter
+): AccountAdminBookStore {
+  const fallback = new Map<string, string>();
+  let active = true;
+  let persistent: AdminStorageAdapter | null = adapter || null;
+  if (!persistent) {
     try {
       if (typeof window !== 'undefined' && window.localStorage) {
-        return window.localStorage.getItem(key);
+        persistent = window.localStorage;
       }
     } catch {
-      // Fall through
+      persistent = null;
     }
-    return adminMemoryStorage.get(key) || null;
-  },
-  setItem(key: string, value: string): void {
+  }
+
+  const readState = (): string | null => {
+    if (!active) return null;
     try {
-      if (typeof window !== 'undefined' && window.localStorage) {
-        window.localStorage.setItem(key, value);
+      const value = persistent?.getItem(storageKey);
+      if (value !== null && value !== undefined) {
+        fallback.set(storageKey, value);
+        return value;
       }
     } catch {
-      // Fall through
+      // Use the instance-specific fallback.
     }
-    adminMemoryStorage.set(key, value);
-  },
-};
+    return fallback.get(storageKey) ?? null;
+  };
 
-/**
- * AdminBookStore: Dedicated store for Noon platform curated curricula / admin books.
- * Strictly manages mock / pre-configured curriculum books.
- * Does not manage or store user local uploads.
- */
-export const AdminBookStore = {
-  /**
-   * Retrieves all admin / curated books.
-   * State (current page, reading progress) is stored separately to preserve user reading position
-   * without altering the immutable admin catalog.
-   */
-  getBooks(): AdminBook[] {
+  const writeState = (value: string): void => {
+    if (!active) return;
+    fallback.set(storageKey, value);
     try {
-      const savedState = safeAdminStorage.getItem(ADMIN_STORAGE_KEYS.ADMIN_BOOKS_STATE);
-      if (savedState) {
-        const stateMap: Record<
-          string,
-          { currentPage?: number; progressPercent?: number; lastOpened?: string }
-        > = JSON.parse(savedState);
+      persistent?.setItem(storageKey, value);
+    } catch {
+      // Keep the fallback local to this account store instance.
+    }
+  };
 
+  const baseBooks = (): AdminBook[] =>
+    INITIAL_ADMIN_BOOKS.map((book) => ({
+      ...book,
+      source: 'admin' as const,
+      status: 'demo' as const,
+    }));
+
+  return {
+    getBooks(): AdminBook[] {
+      const savedState = readState();
+      if (!savedState) return baseBooks();
+      try {
+        const stateMap: AdminBookState = JSON.parse(savedState);
         return INITIAL_ADMIN_BOOKS.map((book) => {
           const userProgress = stateMap[book.id];
-          if (userProgress) {
-            return {
-              ...book,
-              source: 'admin' as const,
-              status: 'demo' as const,
-              currentPage: userProgress.currentPage ?? book.currentPage,
-              progressPercent: userProgress.progressPercent ?? book.progressPercent,
-              lastOpened: userProgress.lastOpened ?? book.lastOpened,
-            };
+          if (!userProgress) {
+            return { ...book, source: 'admin' as const, status: 'demo' as const };
           }
           return {
             ...book,
             source: 'admin' as const,
             status: 'demo' as const,
+            currentPage: userProgress.currentPage ?? book.currentPage,
+            progressPercent: userProgress.progressPercent ?? book.progressPercent,
+            lastOpened: userProgress.lastOpened ?? book.lastOpened,
           };
         });
+      } catch (error) {
+        console.warn('AdminBookStore: Could not load reading state', error);
+        return baseBooks();
       }
-    } catch (e) {
-      console.warn('AdminBookStore: Could not load reading state', e);
-    }
+    },
 
-    return INITIAL_ADMIN_BOOKS.map((book) => ({
-      ...book,
-      source: 'admin' as const,
-      status: 'demo' as const,
-    }));
-  },
+    getBookById(bookId: string): AdminBook | null {
+      return this.getBooks().find((book) => book.id === bookId) || null;
+    },
 
-  /**
-   * Finds a specific admin book by ID
-   */
-  getBookById(bookId: string): AdminBook | null {
-    const books = this.getBooks();
-    return books.find((b) => b.id === bookId) || null;
-  },
-
-  /**
-   * Updates reading progress for an admin book (without modifying original curriculum content)
-   */
-  updateBookPage(bookId: string, pageNumber: number): void {
-    try {
-      const savedState = safeAdminStorage.getItem(ADMIN_STORAGE_KEYS.ADMIN_BOOKS_STATE);
-      const stateMap: Record<
-        string,
-        { currentPage?: number; progressPercent?: number; lastOpened?: string }
-      > = savedState ? JSON.parse(savedState) : {};
-
-      const target = INITIAL_ADMIN_BOOKS.find((b) => b.id === bookId);
-      if (target) {
+    updateBookPage(bookId: string, pageNumber: number): void {
+      if (!active) return;
+      try {
+        const savedState = readState();
+        const stateMap: AdminBookState = savedState ? JSON.parse(savedState) : {};
+        const target = INITIAL_ADMIN_BOOKS.find((book) => book.id === bookId);
+        if (!target) return;
         const progress = Math.min(100, Math.round((pageNumber / target.totalPages) * 100));
         stateMap[bookId] = {
           currentPage: pageNumber,
           progressPercent: progress,
           lastOpened: 'الآن',
         };
-        safeAdminStorage.setItem(ADMIN_STORAGE_KEYS.ADMIN_BOOKS_STATE, JSON.stringify(stateMap));
+        writeState(JSON.stringify(stateMap));
+      } catch (error) {
+        console.error('AdminBookStore: Failed to save progress', error);
       }
-    } catch (e) {
-      console.error('AdminBookStore: Failed to save progress', e);
-    }
-  },
+    },
 
-  /**
-   * Checks if a book ID belongs to an admin book
-   */
-  isAdminBook(bookId: string): boolean {
-    return INITIAL_ADMIN_BOOKS.some((b) => b.id === bookId);
-  },
-};
+    isAdminBook(bookId: string): boolean {
+      return INITIAL_ADMIN_BOOKS.some((book) => book.id === bookId);
+    },
+
+    clearMemoryCache(): void {
+      fallback.clear();
+    },
+
+    revoke(): void {
+      active = false;
+      fallback.clear();
+    },
+  };
+}
+
+/** Legacy, unscoped store remains available only to older/non-account callers. */
+export const AdminBookStore = createAdminBookStore(LEGACY_ADMIN_BOOKS_STATE_KEY);
+
+export function createAccountAdminBookStore(
+  userId: AuthenticatedUserId
+): AccountAdminBookStore {
+  return createAdminBookStore(accountStorageKey(userId, 'admin_books_state_v1'));
+}
 
 export default AdminBookStore;

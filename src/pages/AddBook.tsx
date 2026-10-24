@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { useI18n } from '../i18n';
 import { Book, ActivePage } from '../types';
-import { localDocumentStore } from '../services/local-document-store';
+import type { LocalDocumentStoreInterface } from '../services/local-document-store/types';
 import { LOCAL_STORE_CONFIG, formatFileSize } from '../services/local-document-store/config';
 import { generateEducationalSamplePdf } from '../services/samplePdfGenerator';
 import { pdfService } from '../services/pdfService';
@@ -12,6 +12,7 @@ interface AddBookProps {
   onAddBook: (newBook: Book) => void;
   onOpenBook: (bookId: string) => void;
   onNavigate: (page: ActivePage) => void;
+  documents: LocalDocumentStoreInterface;
 }
 
 type UploadState = 'idle' | 'processing' | 'success' | 'error';
@@ -20,6 +21,7 @@ export const AddBook: React.FC<AddBookProps> = ({
   onAddBook,
   onOpenBook,
   onNavigate,
+  documents,
 }) => {
   const { t, isRTL } = useI18n();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -77,7 +79,7 @@ export const AddBook: React.FC<AddBookProps> = ({
         `كتاب دراسي محفوظ محلياً على هذا الجهاز (${pageCount} صفحة).`;
 
       // 3. Store in IndexedDB with separated metadata & Blob
-      const savedMetadata = await localDocumentStore.saveDocument({
+      const savedMetadata = await documents.saveDocument({
         id: bookId,
         fileName: cleanTitle,
         fileSize: fileBlob.size,

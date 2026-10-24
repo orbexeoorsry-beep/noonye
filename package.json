@@ -16,7 +16,7 @@
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "test": "npm run build && npm run test:accounts && npm run test:release-safety && npm run test:body-parser-security && npm run test:dashboard-validation && tsx --test tests/accounts-path-http.test.ts && tsx tests/assistant-off.test.ts && npm run test:accounts-browser && npm run test:role-dashboards-browser && npm run test:assistant-browser && tsx tests/pdf-viewer.test.ts && tsx --test tests/quiz-copy.test.ts && tsx --test tests/ai-ui-copy.test.ts && npm run test:pwa-browser",
-    "test:accounts": "tsx --test --test-concurrency=1 tests/accounts.test.ts tests/accounts-config.test.ts tests/accounts-security.test.ts tests/dashboards.test.ts",
+    "test:accounts": "tsx --test --test-concurrency=1 tests/accounts.test.ts tests/accounts-config.test.ts tests/accounts-security.test.ts tests/dashboards.test.ts tests/account-local-isolation.test.ts",
     "test:release-safety": "tsx --test --test-concurrency=1 tests/schema-safety.test.ts tests/account-http-policy.test.ts",
     "test:body-parser-security": "node --test tests/body-parser-security.test.mjs",
     "test:dashboard-validation": "tsx tests/dashboard-validation.test.ts",
@@ -28,7 +28,7 @@
     "test:pwa-browser": "node tests/pwa-browser.test.mjs",
     "test:assistant-browser": "node tests/assistant-browser.test.mjs",
     "test:assistant-off": "npm run build && tsx tests/assistant-off.test.ts",
-    "test:schools:rc": "npm run lint && npm run build && npm run test:release-safety && tsx --test --test-concurrency=1 tests/accounts.test.ts tests/accounts-config.test.ts tests/accounts-security.test.ts tests/dashboards.test.ts tests/accounts-path-http.test.ts tests/persistent-storage.test.ts tests/production-security.test.ts tests/sqlite-snapshot.test.ts tests/quiz-copy.test.ts tests/ai-ui-copy.test.ts && tsx tests/dashboard-validation.test.ts && tsx tests/assistant-off.test.ts && tsx --test --test-concurrency=1 tests/accounts-browser.test.ts tests/role-dashboards-browser.test.ts && node tests/assistant-browser.test.mjs"
+    "test:schools:rc": "npm run lint && npm run build && npm run test:release-safety && tsx --test --test-concurrency=1 tests/accounts.test.ts tests/accounts-config.test.ts tests/accounts-security.test.ts tests/dashboards.test.ts tests/accounts-path-http.test.ts tests/persistent-storage.test.ts tests/production-security.test.ts tests/sqlite-snapshot.test.ts tests/quiz-copy.test.ts tests/ai-ui-copy.test.ts tests/account-local-isolation.test.ts && tsx tests/dashboard-validation.test.ts && tsx tests/assistant-off.test.ts && tsx --test --test-concurrency=1 tests/accounts-browser.test.ts tests/role-dashboards-browser.test.ts && node tests/assistant-browser.test.mjs"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

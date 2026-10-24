@@ -1,6 +1,8 @@
 import React from 'react';
 import { Book } from '../types';
 import { PdfViewer } from '../features/book-viewer/PdfViewer';
+import type { LocalDocumentStoreInterface } from '../services/local-document-store/types';
+import type { AccountStorageService } from '../services/storage';
 
 interface BookViewerPageProps {
   book: Book;
@@ -8,6 +10,8 @@ interface BookViewerPageProps {
   onDeleteBook?: (bookId: string) => void;
   onUpdatePageNumber: (bookId: string, pageNum: number) => void;
   onQuizCompleted: (isCorrect: boolean) => void;
+  documents: LocalDocumentStoreInterface;
+  storage: AccountStorageService;
 }
 
 export const BookViewerPage: React.FC<BookViewerPageProps> = ({
@@ -16,6 +20,8 @@ export const BookViewerPage: React.FC<BookViewerPageProps> = ({
   onDeleteBook,
   onUpdatePageNumber,
   onQuizCompleted,
+  documents,
+  storage,
 }) => {
   return (
     <PdfViewer
@@ -24,6 +30,8 @@ export const BookViewerPage: React.FC<BookViewerPageProps> = ({
       onDeleteBook={onDeleteBook}
       onUpdatePageNumber={onUpdatePageNumber}
       onQuizCompleted={onQuizCompleted}
+      documents={documents}
+      storage={storage}
     />
   );
 };

@@ -3,6 +3,10 @@ import * as pdfjsLib from 'pdfjs-dist';
 const PDFJS_VERSION = pdfjsLib.version || '4.0.379';
 const CMAP_URL = `https://unpkg.com/pdfjs-dist@${PDFJS_VERSION}/cmaps/`;
 const STANDARD_FONT_DATA_URL = `https://unpkg.com/pdfjs-dist@${PDFJS_VERSION}/standard_fonts/`;
+const loadingTaskByDocument = new WeakMap<
+  pdfjsLib.PDFDocumentProxy,
+  { destroy: () => Promise<void> }
+>();
 
 // Configure PDF.js worker safely
 if (typeof window !== 'undefined') {
@@ -309,7 +313,20 @@ export const pdfService = {
         ? { url: resolvedSource, ...baseParams }
         : { data: resolvedSource, ...baseParams }
     );
-    return await loadingTask.promise;
+    const document = await loadingTask.promise;
+    loadingTaskByDocument.set(document, loadingTask);
+    return document;
+  },
+
+  /** Destroy the owning loading task, which also releases the PDF.js worker. */
+  async destroyDocument(document: pdfjsLib.PDFDocumentProxy): Promise<void> {
+    const loadingTask = loadingTaskByDocument.get(document);
+    loadingTaskByDocument.delete(document);
+    if (loadingTask) {
+      await loadingTask.destroy();
+      return;
+    }
+    await document.cleanup();
   },
 
   /**
