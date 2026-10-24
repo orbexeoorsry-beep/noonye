@@ -293,9 +293,11 @@ export const pdfService = {
    * browser `@font-face` HarfBuzz double-shaping and RTL BiDi glyph collisions.
    */
   async loadDocument(
-    source: ArrayBuffer | Uint8Array | Blob | string
+    source: ArrayBuffer | Uint8Array | Blob | string,
+    signal?: AbortSignal
   ): Promise<pdfjsLib.PDFDocumentProxy> {
     const resolvedSource = await normalizePdfSource(source);
+    if (signal?.aborted) throw new Error('PDF load cancelled.');
 
     const baseParams = {
       cMapUrl: CMAP_URL,
@@ -313,9 +315,20 @@ export const pdfService = {
         ? { url: resolvedSource, ...baseParams }
         : { data: resolvedSource, ...baseParams }
     );
-    const document = await loadingTask.promise;
-    loadingTaskByDocument.set(document, loadingTask);
-    return document;
+    const abortTask = () => {
+      void loadingTask.destroy().catch(() => undefined);
+    };
+    signal?.addEventListener('abort', abortTask, { once: true });
+    try {
+      const document = await loadingTask.promise;
+      if (signal?.aborted) {
+        throw new Error('PDF load cancelled.');
+      }
+      loadingTaskByDocument.set(document, loadingTask);
+      return document;
+    } finally {
+      signal?.removeEventListener('abort', abortTask);
+    }
   },
 
   /** Destroy the owning loading task, which also releases the PDF.js worker. */

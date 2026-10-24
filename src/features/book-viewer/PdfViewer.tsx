@@ -52,6 +52,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
   const [pdfDoc, setPdfDoc] = useState<pdfjsLib.PDFDocumentProxy | null>(null);
   const pdfDocRef = useRef<pdfjsLib.PDFDocumentProxy | null>(null);
   const pdfLoadEpochRef = useRef(0);
+  const pdfLoadAbortRef = useRef<AbortController | null>(null);
   const [currentPage, setCurrentPage] = useState<number>(book.currentPage || 1);
   const [totalPages, setTotalPages] = useState<number>(book.totalPages || 3);
   const [scale, setScale] = useState<number>(1.0);
@@ -308,6 +309,9 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
 
   // Load PDF Document & extract structured curriculum lessons
   const loadPdf = useCallback(async () => {
+    pdfLoadAbortRef.current?.abort();
+    const abortController = new AbortController();
+    pdfLoadAbortRef.current = abortController;
     const epoch = ++pdfLoadEpochRef.current;
     setIsLoadingDoc(true);
     setLoadError(null);
@@ -326,6 +330,8 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
         data = generated.buffer as ArrayBuffer;
       }
 
+      if (epoch !== pdfLoadEpochRef.current || abortController.signal.aborted) return;
+
       if (!data || (typeof data !== 'string' && data.byteLength === 0)) {
         throw new Error(t.viewer.invalidFileError);
       }
@@ -334,7 +340,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
         throw new Error(t.viewer.fileTooLargeError);
       }
 
-      const doc = await pdfService.loadDocument(data);
+      const doc = await pdfService.loadDocument(data, abortController.signal);
       if (epoch !== pdfLoadEpochRef.current) {
         void pdfService.destroyDocument(doc).catch(() => undefined);
         return;
@@ -359,7 +365,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
       const initialLesson = bookLessonsService.findLessonForPage(extractedLessons, initialPage);
       setActiveLesson(initialLesson);
     } catch (err: unknown) {
-      if (epoch !== pdfLoadEpochRef.current) return;
+      if (epoch !== pdfLoadEpochRef.current || abortController.signal.aborted) return;
       console.error('Failed to load PDF', err);
       const errMsg = err instanceof Error ? err.message : String(err);
       if (errMsg.includes('Invalid PDF') || errMsg.includes('corrupted')) {
@@ -371,6 +377,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
       }
     } finally {
       if (epoch === pdfLoadEpochRef.current) setIsLoadingDoc(false);
+      if (pdfLoadAbortRef.current === abortController) pdfLoadAbortRef.current = null;
     }
   }, [book.id, documents, t.viewer.invalidFileError, t.viewer.fileTooLargeError]);
 
@@ -378,6 +385,8 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
     void loadPdf();
     return () => {
       pdfLoadEpochRef.current += 1;
+      pdfLoadAbortRef.current?.abort();
+      pdfLoadAbortRef.current = null;
       const currentDoc = pdfDocRef.current;
       pdfDocRef.current = null;
       if (currentDoc) void pdfService.destroyDocument(currentDoc).catch(() => undefined);

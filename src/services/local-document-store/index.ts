@@ -217,6 +217,10 @@ class LocalDocumentStoreService implements AccountLocalDocumentStore {
 
     try {
       const db = await this.openDatabase();
+      if (!this.active) {
+        db.close();
+        throw new Error('Library session is locked.');
+      }
       return await new Promise((resolve, reject) => {
         const tx = db.transaction(
           [LOCAL_STORE_CONFIG.STORES.METADATA, LOCAL_STORE_CONFIG.STORES.BLOBS],
@@ -254,10 +258,10 @@ class LocalDocumentStoreService implements AccountLocalDocumentStore {
    */
   async getDocument(id: string): Promise<LocalUserBookRecord | null> {
     const metadata = await this.getDocumentMetadata(id);
-    if (!metadata) return null;
+    if (!metadata || !this.active) return null;
 
     const fileBlob = await this.getDocumentBlob(id);
-    if (!fileBlob) return null;
+    if (!fileBlob || !this.active) return null;
 
     return {
       ...metadata,
@@ -272,14 +276,19 @@ class LocalDocumentStoreService implements AccountLocalDocumentStore {
     if (!this.active) return null;
     try {
       const db = await this.openDatabase();
-      return await new Promise((resolve, reject) => {
+      if (!this.active) {
+        db.close();
+        return null;
+      }
+      const metadata = await new Promise<LocalBookMetadata | null>((resolve, reject) => {
         const tx = db.transaction(LOCAL_STORE_CONFIG.STORES.METADATA, 'readonly');
         const store = tx.objectStore(LOCAL_STORE_CONFIG.STORES.METADATA);
         const request = store.get(id);
 
-        request.onsuccess = () => resolve(request.result || null);
+        request.onsuccess = () => resolve(this.active ? request.result || null : null);
         request.onerror = () => reject(request.error);
       });
+      return this.active ? metadata : null;
     } catch {
       return this.memoryMetadataStore.get(id) || null;
     }
@@ -292,12 +301,20 @@ class LocalDocumentStoreService implements AccountLocalDocumentStore {
     if (!this.active) return null;
     try {
       const db = await this.openDatabase();
-      return await new Promise((resolve, reject) => {
+      if (!this.active) {
+        db.close();
+        return null;
+      }
+      const blob = await new Promise<Blob | null>((resolve, reject) => {
         const tx = db.transaction(LOCAL_STORE_CONFIG.STORES.BLOBS, 'readonly');
         const store = tx.objectStore(LOCAL_STORE_CONFIG.STORES.BLOBS);
         const request = store.get(id);
 
         request.onsuccess = () => {
+          if (!this.active) {
+            resolve(null);
+            return;
+          }
           if (request.result && request.result.blob) {
             resolve(request.result.blob);
           } else {
@@ -306,6 +323,7 @@ class LocalDocumentStoreService implements AccountLocalDocumentStore {
         };
         request.onerror = () => reject(request.error);
       });
+      return this.active ? blob : null;
     } catch {
       return this.memoryBlobStore.get(id) || null;
     }
@@ -315,9 +333,11 @@ class LocalDocumentStoreService implements AccountLocalDocumentStore {
    * Retrieves document as ArrayBuffer for PDF.js viewer
    */
   async getDocumentData(id: string): Promise<ArrayBuffer | null> {
+    if (!this.active) return null;
     const blob = await this.getDocumentBlob(id);
-    if (!blob) return null;
-    return await blob.arrayBuffer();
+    if (!blob || !this.active) return null;
+    const data = await blob.arrayBuffer();
+    return this.active ? data : null;
   }
 
   /**
@@ -327,18 +347,27 @@ class LocalDocumentStoreService implements AccountLocalDocumentStore {
     if (!this.active) return [];
     try {
       const db = await this.openDatabase();
-      return await new Promise((resolve, reject) => {
+      if (!this.active) {
+        db.close();
+        return [];
+      }
+      const documents = await new Promise<LocalBookMetadata[]>((resolve, reject) => {
         const tx = db.transaction(LOCAL_STORE_CONFIG.STORES.METADATA, 'readonly');
         const store = tx.objectStore(LOCAL_STORE_CONFIG.STORES.METADATA);
         const request = store.getAll();
 
         request.onsuccess = () => {
+          if (!this.active) {
+            resolve([]);
+            return;
+          }
           const list: LocalBookMetadata[] = request.result || [];
           list.sort((a, b) => new Date(b.lastOpenedAt).getTime() - new Date(a.lastOpenedAt).getTime());
           resolve(list);
         };
         request.onerror = () => reject(request.error);
       });
+      return this.active ? documents : [];
     } catch {
       const list = Array.from(this.memoryMetadataStore.values());
       list.sort((a, b) => new Date(b.lastOpenedAt).getTime() - new Date(a.lastOpenedAt).getTime());
@@ -355,7 +384,7 @@ class LocalDocumentStoreService implements AccountLocalDocumentStore {
   ): Promise<LocalBookMetadata | null> {
     if (!this.active) return null;
     const current = await this.getDocumentMetadata(id);
-    if (!current) return null;
+    if (!current || !this.active) return null;
 
     const updated: LocalBookMetadata = {
       ...current,
@@ -365,6 +394,10 @@ class LocalDocumentStoreService implements AccountLocalDocumentStore {
 
     try {
       const db = await this.openDatabase();
+      if (!this.active) {
+        db.close();
+        return null;
+      }
       return await new Promise((resolve, reject) => {
         const tx = db.transaction(LOCAL_STORE_CONFIG.STORES.METADATA, 'readwrite');
         const store = tx.objectStore(LOCAL_STORE_CONFIG.STORES.METADATA);
@@ -387,6 +420,10 @@ class LocalDocumentStoreService implements AccountLocalDocumentStore {
     if (!this.active) return false;
     try {
       const db = await this.openDatabase();
+      if (!this.active) {
+        db.close();
+        return false;
+      }
       return await new Promise((resolve, reject) => {
         const tx = db.transaction(
           [LOCAL_STORE_CONFIG.STORES.METADATA, LOCAL_STORE_CONFIG.STORES.BLOBS],
@@ -414,8 +451,13 @@ class LocalDocumentStoreService implements AccountLocalDocumentStore {
   async clearAllDocuments(): Promise<number> {
     if (!this.active) return 0;
     const count = (await this.getAllDocuments()).length;
+    if (!this.active) return 0;
     try {
       const db = await this.openDatabase();
+      if (!this.active) {
+        db.close();
+        return 0;
+      }
       return await new Promise((resolve, reject) => {
         const tx = db.transaction(
           [LOCAL_STORE_CONFIG.STORES.METADATA, LOCAL_STORE_CONFIG.STORES.BLOBS],

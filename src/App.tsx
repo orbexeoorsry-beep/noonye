@@ -127,7 +127,14 @@ function LibraryApp({ scope }: { scope: AccountLibraryScope }) {
       void scope.documents.saveLastPage(bookId, pageNumber);
     }
     setBooks((previous) => previous.map((book) =>
-      book.id === bookId ? { ...book, currentPage: pageNumber } : book
+      book.id === bookId
+        ? {
+            ...book,
+            currentPage: pageNumber,
+            progressPercent: Math.min(100, Math.round((pageNumber / Math.max(1, book.totalPages)) * 100)),
+            lastOpened: 'الآن',
+          }
+        : book
     ));
     setActivePage('viewer');
     window.scrollTo({ top: 0, behavior: 'smooth' });

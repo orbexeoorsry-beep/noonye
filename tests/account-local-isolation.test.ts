@@ -271,6 +271,14 @@ test('school library scopes isolate account data and preserve legacy records', a
       const data = await documents.getDocumentData(id);
       return data ? Array.from(new Uint8Array(data)) : null;
     };
+    const raceController = new SchoolLibrarySessionController();
+    const raceScope = raceController.activate(userA as AuthenticatedUserId);
+    const pendingPdfRead = raceScope.documents.getDocumentData('a-only');
+    const pendingDocumentList = raceScope.documents.getAllDocuments();
+    raceController.invalidate();
+    assert.equal(await pendingPdfRead, null, 'a pending PDF read is discarded after logout/revoke');
+    assert.deepEqual(await pendingDocumentList, [], 'a pending metadata list is discarded after revoke');
+
     assert.deepEqual(await readBytes(scopeA.documents, 'shared-document'), pdfA);
     assert.deepEqual(await readBytes(scopeB.documents, 'shared-document'), pdfB);
     assert.notDeepEqual(await readBytes(scopeA.documents, 'shared-document'), await readBytes(scopeB.documents, 'shared-document'));
