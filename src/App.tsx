@@ -322,7 +322,7 @@ function AuthenticatedLibraryGate() {
         lock('تحتاج المكتبة إلى جلسة مدرسة نشطة. سجّل الدخول لمتابعة الوصول إلى ملفاتك.');
         return;
       }
-      const scope = controller.activate(userId);
+      const scope = controller.activate(userId, () => fetchAuthenticatedUserId());
       setGate({ status: 'ready', userId, scope });
     } catch {
       if (epoch !== requestEpoch.current) return;

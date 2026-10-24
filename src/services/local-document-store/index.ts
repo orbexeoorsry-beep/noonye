@@ -107,6 +107,8 @@ export interface AccountLocalDocumentStore extends LocalDocumentStoreInterface {
   revoke(): void;
 }
 
+export type AccountIdentityValidator = () => Promise<boolean>;
+
 class LocalDocumentStoreService implements AccountLocalDocumentStore {
   private readonly memoryMetadataStore = new Map<string, LocalBookMetadata>();
   private readonly memoryBlobStore = new Map<string, Blob>();
@@ -114,8 +116,20 @@ class LocalDocumentStoreService implements AccountLocalDocumentStore {
 
   constructor(
     private readonly databaseName: string = LOCAL_STORE_CONFIG.DB_NAME,
-    private readonly migrateLegacy = true
+    private readonly migrateLegacy = true,
+    private readonly validateIdentity?: AccountIdentityValidator
   ) {}
+
+  private async mayUseMemoryFallback(): Promise<boolean> {
+    if (!this.active) return false;
+    if (!this.validateIdentity) return this.migrateLegacy && this.active;
+    try {
+      const valid = await this.validateIdentity();
+      return this.active && valid;
+    } catch {
+      return false;
+    }
+  }
 
   private openDatabase(): Promise<IDBDatabase> {
     if (!this.active) return Promise.reject(new Error('Library session is locked.'));
@@ -245,8 +259,8 @@ class LocalDocumentStoreService implements AccountLocalDocumentStore {
         };
       });
     } catch {
-      // Keep fallback data scoped to this service instance and user.
-      if (!this.active) throw new Error('Library session is locked.');
+      // Revalidate the server session before retaining data in an account memory fallback.
+      if (!(await this.mayUseMemoryFallback())) throw new Error('Library session is locked.');
       this.memoryMetadataStore.set(docId, metadata);
       this.memoryBlobStore.set(docId, fileBlob);
       return metadata;
@@ -290,6 +304,7 @@ class LocalDocumentStoreService implements AccountLocalDocumentStore {
       });
       return this.active ? metadata : null;
     } catch {
+      if (!(await this.mayUseMemoryFallback())) return null;
       return this.memoryMetadataStore.get(id) || null;
     }
   }
@@ -325,6 +340,7 @@ class LocalDocumentStoreService implements AccountLocalDocumentStore {
       });
       return this.active ? blob : null;
     } catch {
+      if (!(await this.mayUseMemoryFallback())) return null;
       return this.memoryBlobStore.get(id) || null;
     }
   }
@@ -369,6 +385,7 @@ class LocalDocumentStoreService implements AccountLocalDocumentStore {
       });
       return this.active ? documents : [];
     } catch {
+      if (!(await this.mayUseMemoryFallback())) return [];
       const list = Array.from(this.memoryMetadataStore.values());
       list.sort((a, b) => new Date(b.lastOpenedAt).getTime() - new Date(a.lastOpenedAt).getTime());
       return list;
@@ -407,7 +424,7 @@ class LocalDocumentStoreService implements AccountLocalDocumentStore {
         request.onerror = () => reject(request.error);
       });
     } catch {
-      if (!this.active) return null;
+      if (!(await this.mayUseMemoryFallback())) return null;
       this.memoryMetadataStore.set(id, updated);
       return updated;
     }
@@ -437,7 +454,7 @@ class LocalDocumentStoreService implements AccountLocalDocumentStore {
         tx.onerror = () => reject(tx.error);
       });
     } catch {
-      if (!this.active) return false;
+      if (!(await this.mayUseMemoryFallback())) return false;
       const existed = this.memoryMetadataStore.has(id);
       this.memoryMetadataStore.delete(id);
       this.memoryBlobStore.delete(id);
@@ -471,7 +488,7 @@ class LocalDocumentStoreService implements AccountLocalDocumentStore {
         tx.onerror = () => reject(tx.error);
       });
     } catch {
-      if (!this.active) return 0;
+      if (!(await this.mayUseMemoryFallback())) return 0;
       const memoryCount = this.memoryMetadataStore.size;
       this.memoryMetadataStore.clear();
       this.memoryBlobStore.clear();
@@ -600,9 +617,10 @@ class LocalDocumentStoreService implements AccountLocalDocumentStore {
 }
 
 export function createAccountLocalDocumentStore(
-  userId: AuthenticatedUserId
+  userId: AuthenticatedUserId,
+  validateIdentity: AccountIdentityValidator
 ): AccountLocalDocumentStore {
-  return new LocalDocumentStoreService(getAccountLocalDatabaseName(userId), false);
+  return new LocalDocumentStoreService(getAccountLocalDatabaseName(userId), false, validateIdentity);
 }
 
 export const localDocumentStore = new LocalDocumentStoreService();

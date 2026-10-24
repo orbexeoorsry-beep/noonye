@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Book, InteractiveElement, UserNote } from '../../types';
 import { useI18n } from '../../i18n';
 import { isFeatureEnabled } from '../../config/feature-flags';
-import { pdfService } from '../../services/pdfService';
+import { cancelPdfLoad, pdfService } from '../../services/pdfService';
 import type { LocalDocumentStoreInterface } from '../../services/local-document-store/types';
 import { generateEducationalSamplePdf } from '../../services/samplePdfGenerator';
 import { bookLessonsService, BookLesson } from '../../services/bookLessonsService';
@@ -309,7 +309,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
 
   // Load PDF Document & extract structured curriculum lessons
   const loadPdf = useCallback(async () => {
-    pdfLoadAbortRef.current?.abort();
+    cancelPdfLoad(pdfLoadAbortRef.current);
     const abortController = new AbortController();
     pdfLoadAbortRef.current = abortController;
     const epoch = ++pdfLoadEpochRef.current;
@@ -385,7 +385,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
     void loadPdf();
     return () => {
       pdfLoadEpochRef.current += 1;
-      pdfLoadAbortRef.current?.abort();
+      cancelPdfLoad(pdfLoadAbortRef.current);
       pdfLoadAbortRef.current = null;
       const currentDoc = pdfDocRef.current;
       pdfDocRef.current = null;

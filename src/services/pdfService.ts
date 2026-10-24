@@ -3,9 +3,37 @@ import * as pdfjsLib from 'pdfjs-dist';
 const PDFJS_VERSION = pdfjsLib.version || '4.0.379';
 const CMAP_URL = `https://unpkg.com/pdfjs-dist@${PDFJS_VERSION}/cmaps/`;
 const STANDARD_FONT_DATA_URL = `https://unpkg.com/pdfjs-dist@${PDFJS_VERSION}/standard_fonts/`;
+export interface CancellablePdfLoadingTask {
+  promise: Promise<pdfjsLib.PDFDocumentProxy>;
+  cancel(): Promise<void>;
+}
+
+export type PdfLoadingTaskFactory = (
+  source?: Parameters<typeof pdfjsLib.getDocument>[0]
+) => CancellablePdfLoadingTask;
+
+export function adaptPdfJsLoadingTask(
+  task: Pick<ReturnType<typeof pdfjsLib.getDocument>, 'promise' | 'destroy'>
+): CancellablePdfLoadingTask {
+  return {
+    promise: task.promise,
+    // PDF.js exposes destroy(), not cancel(); this is its supported abort/worker cleanup API.
+    cancel: () => task.destroy(),
+  };
+}
+
+const createNativeLoadingTask: PdfLoadingTaskFactory = (source) => {
+  const task = pdfjsLib.getDocument(source);
+  return adaptPdfJsLoadingTask(task);
+};
+
+export function cancelPdfLoad(controller: AbortController | null | undefined): void {
+  controller?.abort();
+}
+
 const loadingTaskByDocument = new WeakMap<
   pdfjsLib.PDFDocumentProxy,
-  { destroy: () => Promise<void> }
+  CancellablePdfLoadingTask
 >();
 
 // Configure PDF.js worker safely
@@ -294,7 +322,8 @@ export const pdfService = {
    */
   async loadDocument(
     source: ArrayBuffer | Uint8Array | Blob | string,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    taskFactory: PdfLoadingTaskFactory = createNativeLoadingTask
   ): Promise<pdfjsLib.PDFDocumentProxy> {
     const resolvedSource = await normalizePdfSource(source);
     if (signal?.aborted) throw new Error('PDF load cancelled.');
@@ -310,13 +339,13 @@ export const pdfService = {
       stopAtErrors: false,
     };
 
-    const loadingTask = pdfjsLib.getDocument(
+    const loadingTask = taskFactory(
       typeof resolvedSource === 'string'
         ? { url: resolvedSource, ...baseParams }
         : { data: resolvedSource, ...baseParams }
     );
     const abortTask = () => {
-      void loadingTask.destroy().catch(() => undefined);
+      void loadingTask.cancel().catch(() => undefined);
     };
     signal?.addEventListener('abort', abortTask, { once: true });
     try {
@@ -336,7 +365,7 @@ export const pdfService = {
     const loadingTask = loadingTaskByDocument.get(document);
     loadingTaskByDocument.delete(document);
     if (loadingTask) {
-      await loadingTask.destroy();
+      await loadingTask.cancel();
       return;
     }
     await document.cleanup();

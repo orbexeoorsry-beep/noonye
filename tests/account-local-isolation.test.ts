@@ -108,6 +108,7 @@ class FakeDatabase {
 
 class FakeIndexedDB {
   readonly databases = new Map<string, FakeDatabase>();
+  failNextOpen = 0;
 
   open(name: string, version = 1): any {
     const request: any = {
@@ -119,6 +120,12 @@ class FakeIndexedDB {
       onblocked: null,
     };
     setTimeout(() => {
+      if (this.failNextOpen > 0) {
+        this.failNextOpen -= 1;
+        request.error = new Error('Synthetic IndexedDB open failure.');
+        request.onerror?.({ target: request });
+        return;
+      }
       let database = this.databases.get(name);
       const oldVersion = database?.version ?? 0;
       if (!database) {
@@ -212,6 +219,8 @@ test('school library scopes isolate account data and preserve legacy records', a
     const userB = await fetchAuthenticatedUserId(makeSessionFetcher(cookieB));
     assert.equal(unauthenticated, null, 'missing server session returns no identity');
     assert.ok(userA && userB && userA !== userB, 'distinct server sessions return distinct user IDs');
+    const readIdentityA = () => fetchAuthenticatedUserId(makeSessionFetcher(cookieA));
+    const readIdentityB = () => fetchAuthenticatedUserId(makeSessionFetcher(cookieB));
 
     const fakeIdb = new FakeIndexedDB();
     const localStorage = new MemoryStorage();
@@ -246,8 +255,8 @@ test('school library scopes isolate account data and preserve legacy records', a
 
     const controllerA = new SchoolLibrarySessionController();
     const controllerB = new SchoolLibrarySessionController();
-    const scopeA = controllerA.activate(userA as AuthenticatedUserId);
-    const scopeB = controllerB.activate(userB as AuthenticatedUserId);
+    const scopeA = controllerA.activate(userA as AuthenticatedUserId, readIdentityA);
+    const scopeB = controllerB.activate(userB as AuthenticatedUserId, readIdentityB);
     const makePdf = (bytes: number[], fileName: string) => ({
       id: 'shared-document',
       fileName,
@@ -271,8 +280,53 @@ test('school library scopes isolate account data and preserve legacy records', a
       const data = await documents.getDocumentData(id);
       return data ? Array.from(new Uint8Array(data)) : null;
     };
+
+    let identityChecks = 0;
+    let markIdentityCheckStarted!: () => void;
+    let resolveDelayedIdentity!: () => void;
+    const identityCheckStarted = new Promise<void>((resolve) => {
+      markIdentityCheckStarted = resolve;
+    });
+    const delayedIdentity = new Promise<void>((resolve) => {
+      resolveDelayedIdentity = resolve;
+    });
+    const readIdentityWithDelay = async (): Promise<AuthenticatedUserId | null> => {
+      identityChecks += 1;
+      if (identityChecks > 2) {
+        markIdentityCheckStarted();
+        await delayedIdentity;
+      }
+      return readIdentityA();
+    };
+    const fallbackController = new SchoolLibrarySessionController();
+    const fallbackScope = fallbackController.activate(
+      userA as AuthenticatedUserId,
+      readIdentityWithDelay
+    );
+    fakeIdb.failNextOpen = 1;
+    await fallbackScope.documents.saveDocument({
+      ...makePdf([70, 65, 76, 76, 66, 65, 67, 75], 'fallback-only.pdf'),
+      id: 'fallback-only',
+    });
+    fakeIdb.failNextOpen = 1;
+    assert.deepEqual(
+      await readBytes(fallbackScope.documents, 'fallback-only'),
+      [70, 65, 76, 76, 66, 65, 67, 75],
+      'a confirmed current identity may use the account memory fallback'
+    );
+    fakeIdb.failNextOpen = 1;
+    const pendingFallbackRead = fallbackScope.documents.getDocumentData('fallback-only');
+    await identityCheckStarted;
+    fallbackController.invalidate();
+    resolveDelayedIdentity();
+    assert.equal(
+      await pendingFallbackRead,
+      null,
+      'an IndexedDB failure must not expose memory fallback after the scope was invalidated'
+    );
+
     const raceController = new SchoolLibrarySessionController();
-    const raceScope = raceController.activate(userA as AuthenticatedUserId);
+    const raceScope = raceController.activate(userA as AuthenticatedUserId, readIdentityA);
     const pendingPdfRead = raceScope.documents.getDocumentData('a-only');
     const pendingDocumentList = raceScope.documents.getAllDocuments();
     raceController.invalidate();
@@ -298,12 +352,12 @@ test('school library scopes isolate account data and preserve legacy records', a
     assert.ok(fakeIdb.databases.has(accountDatabaseName(userB as AuthenticatedUserId)));
 
     const switchController = new SchoolLibrarySessionController();
-    const switchingA = switchController.activate(userA as AuthenticatedUserId);
-    const switchingB = switchController.activate(userB as AuthenticatedUserId);
+    const switchingA = switchController.activate(userA as AuthenticatedUserId, readIdentityA);
+    const switchingB = switchController.activate(userB as AuthenticatedUserId, readIdentityB);
     assert.deepEqual(await switchingA.documents.getAllDocuments(), [], 'switching away revokes A volatile state');
     assert.equal(await readBytes(switchingB.documents, 'a-only'), null, 'B remains isolated after A→B switch');
     assert.deepEqual(await readBytes(switchingB.documents, 'b-only'), [66, 45, 111, 110, 108, 121]);
-    const switchedBackA = switchController.activate(userA as AuthenticatedUserId);
+    const switchedBackA = switchController.activate(userA as AuthenticatedUserId, readIdentityA);
     assert.deepEqual(await readBytes(switchedBackA.documents, 'a-only'), [65, 45, 111, 110, 108, 121]);
     switchController.invalidate();
 
@@ -355,7 +409,7 @@ test('school library scopes isolate account data and preserve legacy records', a
       /session is locked/i
     );
 
-    const reactivatedB = controllerB.activate(userB as AuthenticatedUserId);
+    const reactivatedB = controllerB.activate(userB as AuthenticatedUserId, readIdentityB);
     assert.deepEqual(await readBytes(reactivatedB.documents, 'b-only'), [66, 45, 111, 110, 108, 121]);
     assert.deepEqual(reactivatedB.storage.getNotes().map((note) => note.text), ['note B']);
     broadcastSchoolSessionChange();

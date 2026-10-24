@@ -8,6 +8,7 @@ import {
   localDocumentStore,
   createAccountLocalDocumentStore,
   type AccountLocalDocumentStore,
+  type AccountIdentityValidator,
 } from './local-document-store';
 import {
   storageService,
@@ -24,9 +25,10 @@ export interface AccountLibraryScope {
 }
 
 export function createAccountLibraryScope(
-  userId: AuthenticatedUserId
+  userId: AuthenticatedUserId,
+  validateIdentity: AccountIdentityValidator
 ): AccountLibraryScope {
-  const documents = createAccountLocalDocumentStore(userId);
+  const documents = createAccountLocalDocumentStore(userId, validateIdentity);
   const storage = createAccountStorageService(userId);
   const adminBooks = createAccountAdminBookStore(userId);
   let revoked = false;
@@ -54,11 +56,26 @@ export class SchoolLibrarySessionController {
     return this.activeScope;
   }
 
-  activate(userId: AuthenticatedUserId): AccountLibraryScope {
+  activate(
+    userId: AuthenticatedUserId,
+    readCurrentIdentity: () => Promise<AuthenticatedUserId | null>
+  ): AccountLibraryScope {
     if (this.activeScope?.userId === userId) return this.activeScope;
     this.invalidate();
-    this.activeScope = createAccountLibraryScope(userId);
-    return this.activeScope;
+    let scope: AccountLibraryScope | null = null;
+    const validateIdentity: AccountIdentityValidator = async () => {
+      const expectedScope = scope;
+      if (!expectedScope || this.activeScope !== expectedScope) return false;
+      try {
+        const currentUserId = await readCurrentIdentity();
+        return this.activeScope === expectedScope && currentUserId === userId;
+      } catch {
+        return false;
+      }
+    };
+    scope = createAccountLibraryScope(userId, validateIdentity);
+    this.activeScope = scope;
+    return scope;
   }
 
   invalidate(): void {
