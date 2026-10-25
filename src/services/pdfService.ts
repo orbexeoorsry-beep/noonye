@@ -3,11 +3,43 @@ import * as pdfjsLib from 'pdfjs-dist';
 const PDFJS_VERSION = pdfjsLib.version || '4.0.379';
 const CMAP_URL = `https://unpkg.com/pdfjs-dist@${PDFJS_VERSION}/cmaps/`;
 const STANDARD_FONT_DATA_URL = `https://unpkg.com/pdfjs-dist@${PDFJS_VERSION}/standard_fonts/`;
+export interface CancellablePdfLoadingTask {
+  promise: Promise<pdfjsLib.PDFDocumentProxy>;
+  cancel(): Promise<void>;
+}
+
+export type PdfLoadingTaskFactory = (
+  source?: Parameters<typeof pdfjsLib.getDocument>[0]
+) => CancellablePdfLoadingTask;
+
+export function adaptPdfJsLoadingTask(
+  task: Pick<ReturnType<typeof pdfjsLib.getDocument>, 'promise' | 'destroy'>
+): CancellablePdfLoadingTask {
+  return {
+    promise: task.promise,
+    // PDF.js exposes destroy(), not cancel(); this is its supported abort/worker cleanup API.
+    cancel: () => task.destroy(),
+  };
+}
+
+const createNativeLoadingTask: PdfLoadingTaskFactory = (source) => {
+  const task = pdfjsLib.getDocument(source);
+  return adaptPdfJsLoadingTask(task);
+};
+
+export function cancelPdfLoad(controller: AbortController | null | undefined): void {
+  controller?.abort();
+}
+
+const loadingTaskByDocument = new WeakMap<
+  pdfjsLib.PDFDocumentProxy,
+  CancellablePdfLoadingTask
+>();
 
 // Configure PDF.js worker safely
 if (typeof window !== 'undefined') {
   try {
-    pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${PDFJS_VERSION}/build/pdf.worker.min.mjs`;
+    pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('../../node_modules/pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).href;
   } catch (e) {
     console.warn('PDF.js worker initialization notice', e);
   }
@@ -268,6 +300,19 @@ function enforceLtrCanvasContext(canvas: HTMLCanvasElement, context: CanvasRende
   }
 }
 
+export async function normalizePdfSource(
+  source: ArrayBuffer | Uint8Array | Blob | string
+): Promise<ArrayBuffer | Uint8Array | string> {
+  if (typeof Blob !== 'undefined' && source instanceof Blob) {
+    return new Uint8Array((await source.arrayBuffer()).slice(0));
+  }
+  if (source instanceof ArrayBuffer) return new Uint8Array(source.slice(0));
+  if (source instanceof Uint8Array) {
+    return new Uint8Array(source.buffer.slice(source.byteOffset, source.byteOffset + source.byteLength));
+  }
+  if (typeof source === 'string') return source;
+  throw new TypeError('Unsupported PDF source');
+}
 export const pdfService = {
   /**
    * Loads any PDF Document resiliently from an ArrayBuffer, Uint8Array, Blob, or URL.
@@ -276,21 +321,12 @@ export const pdfService = {
    * browser `@font-face` HarfBuzz double-shaping and RTL BiDi glyph collisions.
    */
   async loadDocument(
-    source: ArrayBuffer | Uint8Array | Blob | string
+    source: ArrayBuffer | Uint8Array | Blob | string,
+    signal?: AbortSignal,
+    taskFactory: PdfLoadingTaskFactory = createNativeLoadingTask
   ): Promise<pdfjsLib.PDFDocumentProxy> {
-    let resolvedSource: ArrayBuffer | Uint8Array | string;
-
-    if (typeof Blob !== 'undefined' && source instanceof Blob) {
-      const buf = await source.arrayBuffer();
-      resolvedSource = new Uint8Array(buf.slice(0));
-    } else if (source instanceof ArrayBuffer) {
-      // Clone buffer so PDF.js worker transfer never detaches caller's ArrayBuffer
-      resolvedSource = new Uint8Array(source.slice(0));
-    } else if (source instanceof Uint8Array) {
-      resolvedSource = new Uint8Array(source.buffer.slice(source.byteOffset, source.byteOffset + source.byteLength));
-    } else {
-      resolvedSource = source;
-    }
+    const resolvedSource = await normalizePdfSource(source);
+    if (signal?.aborted) throw new Error('PDF load cancelled.');
 
     const baseParams = {
       cMapUrl: CMAP_URL,
@@ -303,12 +339,36 @@ export const pdfService = {
       stopAtErrors: false,
     };
 
-    const loadingTask = pdfjsLib.getDocument(
+    const loadingTask = taskFactory(
       typeof resolvedSource === 'string'
         ? { url: resolvedSource, ...baseParams }
         : { data: resolvedSource, ...baseParams }
     );
-    return await loadingTask.promise;
+    const abortTask = () => {
+      void loadingTask.cancel().catch(() => undefined);
+    };
+    signal?.addEventListener('abort', abortTask, { once: true });
+    try {
+      const document = await loadingTask.promise;
+      if (signal?.aborted) {
+        throw new Error('PDF load cancelled.');
+      }
+      loadingTaskByDocument.set(document, loadingTask);
+      return document;
+    } finally {
+      signal?.removeEventListener('abort', abortTask);
+    }
+  },
+
+  /** Destroy the owning loading task, which also releases the PDF.js worker. */
+  async destroyDocument(document: pdfjsLib.PDFDocumentProxy): Promise<void> {
+    const loadingTask = loadingTaskByDocument.get(document);
+    loadingTaskByDocument.delete(document);
+    if (loadingTask) {
+      await loadingTask.cancel();
+      return;
+    }
+    await document.cleanup();
   },
 
   /**
@@ -653,7 +713,7 @@ export const pdfService = {
     const detectedSummary =
       firstMeaningfulLines.length > 0
         ? `${detectedSubject} (${detectedGrade}) — ${firstMeaningfulLines.join(' · ').slice(0, 220)}`
-        : `كتاب ${detectedSubject} (${detectedGrade}) — يضم ${doc.numPages} صفحة جاهزة للقراءة والتحليل البصري والنصي الذكي.`;
+        : `كتاب ${detectedSubject} (${detectedGrade}) — يضم ${doc.numPages} صفحة جاهزة للقراءة.`;
 
     return {
       detectedTitle: metaTitle || undefined,
@@ -665,4 +725,3 @@ export const pdfService = {
     };
   },
 };
-

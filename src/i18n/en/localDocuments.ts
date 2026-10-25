@@ -19,10 +19,10 @@ export const localDocuments: LocalDocumentsTranslations = {
   processingSteps: {
     reading: 'Reading pages and chapters...',
     extracting: 'Extracting figures and formulas...',
-    indexing: 'Indexing content for Noon tools...',
+    indexing: 'Preparing the locally stored book for reading...',
   },
   successTitle: 'Book Prepared Successfully!',
-  successDesc: 'Textbook is ready for viewing with interactive assistance.',
+  successDesc: 'Your book is ready to read locally. Explanation tools are currently unavailable.',
   successAction: 'Open Book in Viewer',
   errorTitle: 'Failed to load file',
   errorDesc: 'An error occurred while reading the textbook file. Please verify the file and try again.',

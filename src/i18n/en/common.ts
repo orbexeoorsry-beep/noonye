@@ -5,7 +5,7 @@ export const common: CommonTranslations = {
   appNameFull: 'Noon | Learning Platform',
   appSlogan: 'Your textbook as is, your understanding better',
   appDescription:
-    'Smart learning platform presenting the original curriculum pages as printed, with on-demand AI explanations for text, equations, and diagrams.',
+    'Read textbook pages in their original format. Books and notes are stored locally on this device; explanation and assessment tools are currently unavailable.',
   close: 'Close',
   cancel: 'Cancel',
   confirm: 'Confirm',

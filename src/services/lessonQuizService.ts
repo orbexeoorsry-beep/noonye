@@ -19,6 +19,7 @@ export interface QuizResult {
   scorePercent: number;
   gradeLabel: string;
   gradeBadge: 'excellent' | 'very_good' | 'good' | 'needs_review';
+  /** @deprecated Compatibility field; contains static local-practice copy, not Gemini feedback. */
   geminiFeedback: string;
   answers: {
     questionId: string;
@@ -32,7 +33,7 @@ export interface QuizResult {
 }
 
 /**
- * Rich pedagogical question bank aligned with official curriculum
+ * Static local practice question bank
  */
 const CURRICULUM_QUESTIONS_BANK: Record<string, QuizQuestion[]> = {
   // ==========================================
@@ -51,7 +52,7 @@ const CURRICULUM_QUESTIONS_BANK: Record<string, QuizQuestion[]> = {
         'بين خطي عرض 15° و 25° شمالاً، وخطي طول 35° و 45° غرباً',
       ],
       correctIndex: 0,
-      explanation: 'وفق المنهج المعتمد، يمتد موقع اليمن الفلكي بين خطي عرض 12° و 19° شمال خط الاستواء، وخطي طول 41° و 54° شرق خط غرينتش.',
+      explanation: 'يمتد الموقع الفلكي لليمن بين خطي عرض 12° و 19° شمال خط الاستواء، وخطي طول 41° و 54° شرق خط غرينتش.',
       hint: 'تقع اليمن بالكامل في نصف الكرة الشمالي ونصف الكرة الشرقي جنوب مدار السرطان.',
       topic: 'الموقع الفلكي',
     },
@@ -492,7 +493,7 @@ const CURRICULUM_QUESTIONS_BANK_EN: Record<string, QuizQuestion[]> = {
         'Between latitudes 15° and 25° North, and longitudes 35° and 45° West',
       ],
       correctIndex: 0,
-      explanation: 'According to the curriculum, Yemen extends astronomically between latitudes 12° and 19° North of the Equator, and longitudes 41° and 54° East of the Prime Meridian.',
+      explanation: 'According to the lesson material, Yemen extends astronomically between latitudes 12° and 19° North of the Equator, and longitudes 41° and 54° East of the Prime Meridian.',
       hint: 'Yemen lies entirely in the Northern and Eastern hemispheres south of the Tropic of Cancer.',
       topic: 'Astronomical Location',
     },
@@ -569,7 +570,7 @@ export const lessonQuizService = {
       }
     }
 
-    // Ensure we always have at least 4-6 rich questions for single lesson, or more for multiple
+    // Add local prompts when the available question bank has fewer than four questions.
     if (resultQuestions.length < 4 && lessons[0]) {
       const extraQuestions = this.generateQuestionsFromLesson(lessons[0], lang);
       extraQuestions.forEach((eq) => {
@@ -583,7 +584,7 @@ export const lessonQuizService = {
   },
 
   /**
-   * Generates dynamic Gemini-style curriculum questions for ANY book lesson
+   * Builds local practice prompts from available lesson metadata
    */
   generateQuestionsFromLesson(lesson: BookLesson, lang: 'ar' | 'en' = 'ar'): QuizQuestion[] {
     const isEnglish = lang === 'en';
@@ -605,25 +606,25 @@ export const lessonQuizService = {
           lessonId: lesson.id,
           lessonTitle: lesson.title,
           question: isEnglish
-            ? `Based on your study of (${header}) in this lesson, which statement is accurate according to the curriculum?`
-            : `في ضوء دراستك لموضوع (${header}) في هذا الدرس: ما هي العبارة المنهجية الصحيحة؟`,
+            ? `Based on your study of (${header}) in this lesson, which statement is accurate based on the available lesson information?`
+            : `في ضوء دراستك لموضوع (${header}) في هذا الدرس: ما العبارة التي تطابق المعلومات المتاحة؟`,
           options: isEnglish
             ? [
                 detail,
                 `This rule contradicts the fundamental principles of ${unitTitle}`,
                 `The concept of (${header}) is completely unrelated to this lesson`,
-                `This topic is only studied outside the scope of this curriculum`,
+                `This topic is only studied outside the scope of this lesson material`,
               ]
             : [
                 detail,
                 `تتعارض هذه القاعدة مع المبادئ الأساسية لمقرر ${unitTitle}`,
                 `لا يرتبط مفهوم (${header}) بموضوعات هذا الدرس إطلاقاً`,
-                `تقتصر دراسة هذا المفهوم على مراحل متقدمة أخرى خارج المنهج`,
+                `هذا الموضوع لا يرتبط بمعلومات الدرس المتاحة`,
               ],
           correctIndex: 0,
           explanation: isEnglish
-            ? `According to the approved curriculum: ${detail}`
-            : `وفقاً للمنهاج الدراسي المعتمد: ${detail}`,
+            ? `Based on the available lesson summary: ${detail}`
+            : `استناداً إلى ملخص الدرس المتاح: ${detail}`,
           hint: isEnglish
             ? `Recall what was explained in the lesson regarding (${header}) on Page ${pageNum}.`
             : `تذكر ما ورد في شرح الدرس حول موضوع (${header}) وموقعه في الصفحة ${pageNum}.`,
@@ -657,13 +658,13 @@ export const lessonQuizService = {
           lessonTitle: title,
           question: `When solving the activities and assessment of (${title}), what is the correct methodology to reach the accurate answer?`,
           options: [
-            'Applying the curricular rules and facts from the lesson and following logical solution steps accurately',
+            'Applying the lesson rules and facts from the lesson and following logical solution steps accurately',
             'Guessing the answer randomly without reviewing given data or laws',
             'Relying only on verbal answers and ignoring written steps and scientific justifications',
             'Skipping exercises and focusing only on reading headings',
           ],
           correctIndex: 0,
-          explanation: 'Curricular mastery and solving lesson exercises depend on linking given data to scientific rules and applying logical steps.',
+          explanation: 'These sample prompts are based on available lesson metadata and may not represent all lesson content.',
           hint: 'Focus on deep comprehension of the lesson and logical connection of the given data.',
           topic: 'Problem-Solving Skills',
         },
@@ -673,30 +674,30 @@ export const lessonQuizService = {
           lessonTitle: title,
           question: `What is the scientific and practical benefit of studying the concepts in (${title})?`,
           options: [
-            'Building a solid knowledge foundation that enables exam excellence and connects the curriculum to real life',
+            'Reviewing the available lesson summary and related concepts',
             'Merely filling textbook pages without any real-world application',
             'Eliminating the need to study the remaining units of the course',
             'Repeating previous concepts without adding any new scientific value',
           ],
           correctIndex: 0,
           explanation: 'Studying the lesson themes consolidates academic understanding and develops critical thinking and deduction skills.',
-          hint: 'Connect theoretical concepts with practical applications and curriculum questions.',
+          hint: 'Connect theoretical concepts with practical applications and lesson material questions.',
           topic: 'Practical Application',
         },
         {
           id: `${lesson.id}-q-review`,
           lessonId: lesson.id,
           lessonTitle: title,
-          question: `How can a student verify complete mastery of all topics in (${title})?`,
+          question: `How can a student review topics in (${title})?`,
           options: [
-            'By solving self-assessment questions, interactive Gemini quizzes, and reviewing model answers',
+            'By solving self-assessment questions, interactive practice questions, and reviewing model answers',
             'By reading the lesson only once without solving any exercises or reviewing',
             'By relying on guesswork during exams without understanding the material',
             'By counting pages without examining the concepts and formulas',
           ],
           correctIndex: 0,
-          explanation: 'Continuous assessment and interactive quizzes ensure knowledge retention and identify areas needing review.',
-          hint: 'Solve exercises and compare your result with the Gemini feedback.',
+          explanation: 'Practice questions can help learners review available lesson topics.',
+          hint: 'Solve exercises and compare your result with the practice feedback.',
           topic: 'Self-Assessment',
         }
       );
@@ -722,15 +723,15 @@ export const lessonQuizService = {
           id: `${lesson.id}-q-methodology`,
           lessonId: lesson.id,
           lessonTitle: title,
-          question: `عند حل أنشطة وتقويم (${title})، ما هي المنهجية المعتمدة للوصول للإجابة الصحيحة؟`,
+          question: `عند حل أنشطة وتقويم (${title})، ما الطريقة المناسبة للوصول إلى إجابة؟`,
           options: [
-            'الاستدلال من القواعد والحقائق المنهجية الواردة بالدرس وتطبيق خطوات الحل بدقة',
+            'الاستدلال من القواعد والحقائق الواردة بالدرس وتطبيق خطوات الحل بدقة',
             'تخمين الإجابة عشوائياً دون مراجعة المعطيات أو القوانين',
             'الاكتفاء بالحل الشفهي وتجاهل كتابة الخطوات والتعليلات العلمية',
             'تخطي المسائل والأنشطة والتركيز على قراءة العناوين فقط',
           ],
           correctIndex: 0,
-          explanation: 'الفهم المنهجي وحل تمارين الدرس يعتمد على ربط المعطيات بالقواعد العلمية المستفادة وتطبيق خطوات الحل المنطقي.',
+          explanation: 'هذه أسئلة تدريبية مبنية على بيانات الدرس المتاحة وقد لا تمثل كامل محتواه.',
           hint: 'التركيز على الفهم العميق للدرس والربط المنطقي للمعطيات.',
           topic: 'مهارات الحل والتقويم',
         },
@@ -740,30 +741,30 @@ export const lessonQuizService = {
           lessonTitle: title,
           question: `ما الفائدة العلمية والتطبيقية من دراسة المفاهيم المقررة في (${title})؟`,
           options: [
-            'بناء قاعدة معرفية راسخة تُمكن الطالب من التفوق في الاختبارات وربط المنهج بالواقع',
+            'مراجعة ملخص الدرس المتاح والمفاهيم المرتبطة به',
             'مجرد ملء صفحات الكتاب دون أي تطبيق عملي في الحياة اليومية',
             'إلغاء الحاجة لدراسة باقي وحدات المقرر الدراسي',
             'تكرار نفس المفاهيم السابقة دون أي إضافة علمية جديدة',
           ],
           correctIndex: 0,
           explanation: 'دراسة محاور الدرس تسهم في ترسيخ الفهم الأكاديمي وتطوير مهارات التفكير والاستنتاج لدى الطالب.',
-          hint: 'ربط المفاهيم النظرية بالتطبيقات العملية وحل الأسئلة المنهجية.',
+          hint: 'ربط المفاهيم النظرية بالتطبيقات العملية وحل أسئلة التدريب.',
           topic: 'التطبيق العملي',
         },
         {
           id: `${lesson.id}-q-review`,
           lessonId: lesson.id,
           lessonTitle: title,
-          question: `كيف يتحقق الطالب من استيعابه التام لجميع محاور (${title})؟`,
+          question: `كيف يمكن للطالب مراجعة موضوعات (${title})؟`,
           options: [
-            'بحل أسئلة التقويم الذاتي واختبارات جيمني التفاعلية ومراجعة الإجابات النموذجية',
+            'بحل أسئلة التقويم الذاتي وأسئلة التدريب التفاعلية ومراجعة الإجابات النموذجية',
             'بقراءة الدرس مرة واحدة فقط دون حل أي تدريبات أو مراجعة',
             'بالاعتماد على التخمين في الاختبارات دون فهم المادة العلمية',
             'بمقارنة عدد الصفحات دون التدقيق في المفاهيم والقوانين',
           ],
           correctIndex: 0,
-          explanation: 'التقويم المستمر وحل الأسئلة التفاعلية يضمن تثبيت المعلومات واكتشاف أي نقاط تحتاج لمراجعة.',
-          hint: 'حل الأسئلة والتمارين ومقارنة النتيجة مع التغذية الراجعة لجيمني.',
+          explanation: 'قد تساعد أسئلة التدريب على مراجعة موضوعات الدرس المتاحة.',
+          hint: 'حل الأسئلة والتمارين ومقارنة النتيجة مع التغذية الراجعة.',
           topic: 'التقويم الذاتي',
         }
       );
@@ -773,7 +774,7 @@ export const lessonQuizService = {
   },
 
   /**
-   * Calculates comprehensive Gemini test score, evaluation grade, and feedback
+   * Calculates a local practice score and neutral result copy
    */
   evaluateQuiz(
     questions: QuizQuestion[],
@@ -804,36 +805,36 @@ export const lessonQuizService = {
     const total = questions.length || 1;
     const scorePercent = Math.round((correctCount / total) * 100);
 
-    let gradeLabel = isEnglish ? 'Excellent! Complete Mastery 🏆' : 'ممتاز! إتقان تام للمنهج 🏆';
+    let gradeLabel = isEnglish ? 'Practice result' : 'نتيجة التدريب';
     let gradeBadge: QuizResult['gradeBadge'] = 'excellent';
-    let geminiFeedback = isEnglish
-      ? 'Outstanding performance! You have mastered the core curriculum facts and concepts and are well-prepared for final exams.'
-      : 'أداء رائع ومبهر! لقد استوعبت حقائق المنهج والمفاهيم الأساسية بشكل متقن جداً، وأنت جاهز تماماً للاختبارات النهائية.';
+    let feedback = isEnglish
+      ? 'This score reflects answers to these local practice questions only; it does not measure overall learning or exam readiness.'
+      : 'تعكس هذه النتيجة إجابات أسئلة التدريب المحلية هذه فقط؛ ولا تقيس مستوى التعلم العام أو الاستعداد للاختبارات.';
 
     if (scorePercent >= 90) {
-      gradeLabel = isEnglish ? 'Excellent! Exceptional Mastery 🏆' : 'ممتاز! استيعاب استثنائي للمنهج 🏆';
+      gradeLabel = isEnglish ? 'Practice score: 90% or higher' : 'نتيجة التدريب: 90٪ فأكثر';
       gradeBadge = 'excellent';
-      geminiFeedback = isEnglish
-        ? 'High-level mastery! Your answers are accurate and align with the approved curriculum standards.'
-        : 'مستوى رفيع ومتقن! إجاباتك دقيقة وتطابق المعايير المنهجية المعتمدة بنجاح تام.';
+      feedback = isEnglish
+        ? 'You answered at least 90% of these local practice questions correctly. This score does not measure overall learning.'
+        : 'أجبت إجابة صحيحة عن 90٪ على الأقل من أسئلة التدريب المحلية هذه. لا تقيس النتيجة مستوى التعلم العام.';
     } else if (scorePercent >= 75) {
-      gradeLabel = isEnglish ? 'Very Good! Strong Understanding 🌟' : 'جيد جداً! استيعاب قوي 🌟';
+      gradeLabel = isEnglish ? 'Practice score: 75–89%' : 'نتيجة التدريب: 75–89٪';
       gradeBadge = 'very_good';
-      geminiFeedback = isEnglish
-        ? 'Well done! Your answers show strong comprehension of most lesson topics, with minor details to review.'
-        : 'أحسنت! إجاباتك تظهر فهماً واسعاً لأغلب محاور الدرس، مع وجود فرصة لتعزيز التفاصيل الصغيرة في الأسئلة التي لم توفق فيها.';
+      feedback = isEnglish
+        ? 'You answered 75–89% of these local practice questions correctly.'
+        : 'أجبت إجابة صحيحة عن 75–89٪ من أسئلة التدريب المحلية هذه.';
     } else if (scorePercent >= 50) {
-      gradeLabel = isEnglish ? 'Good — Review Recommended 📖' : 'جيد - يُنصح بمراجعة بعض النقاط 📖';
+      gradeLabel = isEnglish ? 'Practice score: 50–74%' : 'نتيجة التدريب: 50–74٪';
       gradeBadge = 'good';
-      geminiFeedback = isEnglish
-        ? 'Good attempt! You have a solid foundation, but some specific concepts need another review of the lesson pages.'
-        : 'محاولة طيبة، لديك أساس جيد للموضوع ولكن بعض المفاهيم الدقيقة تحتاج لمراجعة ورقة الدرس مرة أخرى لضمان الدرجة الكاملة.';
+      feedback = isEnglish
+        ? 'You answered 50–74% of these local practice questions correctly.'
+        : 'أجبت إجابة صحيحة عن 50–74٪ من أسئلة التدريب المحلية هذه.';
     } else {
-      gradeLabel = isEnglish ? 'Needs Lesson Review & Retry 💡' : 'بحاجة لمراجعة الدرس وإعادة المحاولة 💡';
+      gradeLabel = isEnglish ? 'Practice score: below 50%' : 'نتيجة التدريب: أقل من 50٪';
       gradeBadge = 'needs_review';
-      geminiFeedback = isEnglish
-        ? 'Do not worry! Learning takes repetition. Review the lesson pages carefully and retake the quiz to reinforce your knowledge.'
-        : 'لا تقلق! التعلم يحتاج إلى التكرار. راجع صفحات الدرس في الكتاب بتركيز ثم أعد الاختبار لترسخ المعلومات في ذهنك.';
+      feedback = isEnglish
+        ? 'You answered fewer than half of these local practice questions correctly. You can review the answers or try again.'
+        : 'أجبت إجابة صحيحة عن أقل من نصف أسئلة التدريب المحلية هذه. يمكنك مراجعة الإجابات أو المحاولة مجدداً.';
     }
 
     return {
@@ -843,7 +844,7 @@ export const lessonQuizService = {
       scorePercent,
       gradeLabel,
       gradeBadge,
-      geminiFeedback,
+      geminiFeedback: feedback,
       answers: details,
     };
   },

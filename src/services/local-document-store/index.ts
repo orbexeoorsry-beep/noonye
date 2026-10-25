@@ -10,23 +10,21 @@ import {
   LocalDocumentStoreInterface,
   StorageUsageInfo,
 } from './types';
-import { LOCAL_STORE_CONFIG, formatFileSize } from './config';
+import {
+  LOCAL_STORE_CONFIG,
+  formatFileSize,
+  getAccountLocalDatabaseName,
+} from './config';
+import type { AuthenticatedUserId } from '../accountScope';
 
-// In-memory fallback if IndexedDB is unavailable
-const memoryMetadataStore = new Map<string, LocalBookMetadata>();
-const memoryBlobStore = new Map<string, Blob>();
-
-function openDatabase(): Promise<IDBDatabase> {
+function openDatabase(databaseName: string, migrateLegacy: boolean): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     if (typeof window === 'undefined' || !window.indexedDB) {
       reject(new Error('IndexedDB is not supported'));
       return;
     }
 
-    const request = window.indexedDB.open(
-      LOCAL_STORE_CONFIG.DB_NAME,
-      LOCAL_STORE_CONFIG.DB_VERSION
-    );
+    const request = window.indexedDB.open(databaseName, LOCAL_STORE_CONFIG.DB_VERSION);
 
     request.onupgradeneeded = (event) => {
       const db = (event.target as IDBOpenDBRequest).result;
@@ -47,7 +45,11 @@ function openDatabase(): Promise<IDBDatabase> {
       }
 
       // Handle migration from legacy v1 schema if present
-      if (oldVersion < 2 && db.objectStoreNames.contains(LOCAL_STORE_CONFIG.STORES.LEGACY)) {
+      if (
+        migrateLegacy &&
+        oldVersion < 2 &&
+        db.objectStoreNames.contains(LOCAL_STORE_CONFIG.STORES.LEGACY)
+      ) {
         const transaction = (event.target as IDBOpenDBRequest).transaction;
         if (transaction) {
           try {
@@ -99,7 +101,51 @@ function openDatabase(): Promise<IDBDatabase> {
   });
 }
 
-class LocalDocumentStoreService implements LocalDocumentStoreInterface {
+export interface AccountLocalDocumentStore extends LocalDocumentStoreInterface {
+  getLocalBooks(): Promise<import('../../types').LocalBook[]>;
+  clearMemoryCache(): void;
+  revoke(): void;
+}
+
+export type AccountIdentityValidator = () => Promise<boolean>;
+
+class LocalDocumentStoreService implements AccountLocalDocumentStore {
+  private readonly memoryMetadataStore = new Map<string, LocalBookMetadata>();
+  private readonly memoryBlobStore = new Map<string, Blob>();
+  private active = true;
+
+  constructor(
+    private readonly databaseName: string = LOCAL_STORE_CONFIG.DB_NAME,
+    private readonly migrateLegacy = true,
+    private readonly validateIdentity?: AccountIdentityValidator
+  ) {}
+
+  private async mayUseMemoryFallback(): Promise<boolean> {
+    if (!this.active) return false;
+    if (!this.validateIdentity) return this.migrateLegacy && this.active;
+    try {
+      const valid = await this.validateIdentity();
+      return this.active && valid;
+    } catch {
+      return false;
+    }
+  }
+
+  private openDatabase(): Promise<IDBDatabase> {
+    if (!this.active) return Promise.reject(new Error('Library session is locked.'));
+    return openDatabase(this.databaseName, this.migrateLegacy);
+  }
+
+  clearMemoryCache(): void {
+    this.memoryMetadataStore.clear();
+    this.memoryBlobStore.clear();
+  }
+
+  revoke(): void {
+    this.active = false;
+    this.clearMemoryCache();
+  }
+
   /**
    * Saves a new or updated document to IndexedDB with separated metadata and blob
    */
@@ -118,6 +164,7 @@ class LocalDocumentStoreService implements LocalDocumentStoreInterface {
     pageCountArg?: number,
     lastPageArg?: number
   ): Promise<LocalBookMetadata> {
+    if (!this.active) throw new Error('Library session is locked.');
     const now = new Date().toISOString();
     let docId: string;
     let fileName: string;
@@ -183,7 +230,11 @@ class LocalDocumentStoreService implements LocalDocumentStoreInterface {
     };
 
     try {
-      const db = await openDatabase();
+      const db = await this.openDatabase();
+      if (!this.active) {
+        db.close();
+        throw new Error('Library session is locked.');
+      }
       return await new Promise((resolve, reject) => {
         const tx = db.transaction(
           [LOCAL_STORE_CONFIG.STORES.METADATA, LOCAL_STORE_CONFIG.STORES.BLOBS],
@@ -208,9 +259,10 @@ class LocalDocumentStoreService implements LocalDocumentStoreInterface {
         };
       });
     } catch {
-      // Memory fallback
-      memoryMetadataStore.set(docId, metadata);
-      memoryBlobStore.set(docId, fileBlob);
+      // Revalidate the server session before retaining data in an account memory fallback.
+      if (!(await this.mayUseMemoryFallback())) throw new Error('Library session is locked.');
+      this.memoryMetadataStore.set(docId, metadata);
+      this.memoryBlobStore.set(docId, fileBlob);
       return metadata;
     }
   }
@@ -220,10 +272,10 @@ class LocalDocumentStoreService implements LocalDocumentStoreInterface {
    */
   async getDocument(id: string): Promise<LocalUserBookRecord | null> {
     const metadata = await this.getDocumentMetadata(id);
-    if (!metadata) return null;
+    if (!metadata || !this.active) return null;
 
     const fileBlob = await this.getDocumentBlob(id);
-    if (!fileBlob) return null;
+    if (!fileBlob || !this.active) return null;
 
     return {
       ...metadata,
@@ -235,18 +287,25 @@ class LocalDocumentStoreService implements LocalDocumentStoreInterface {
    * Retrieves document metadata without loading the large file blob into memory
    */
   async getDocumentMetadata(id: string): Promise<LocalBookMetadata | null> {
+    if (!this.active) return null;
     try {
-      const db = await openDatabase();
-      return await new Promise((resolve, reject) => {
+      const db = await this.openDatabase();
+      if (!this.active) {
+        db.close();
+        return null;
+      }
+      const metadata = await new Promise<LocalBookMetadata | null>((resolve, reject) => {
         const tx = db.transaction(LOCAL_STORE_CONFIG.STORES.METADATA, 'readonly');
         const store = tx.objectStore(LOCAL_STORE_CONFIG.STORES.METADATA);
         const request = store.get(id);
 
-        request.onsuccess = () => resolve(request.result || null);
+        request.onsuccess = () => resolve(this.active ? request.result || null : null);
         request.onerror = () => reject(request.error);
       });
+      return this.active ? metadata : null;
     } catch {
-      return memoryMetadataStore.get(id) || null;
+      if (!(await this.mayUseMemoryFallback())) return null;
+      return this.memoryMetadataStore.get(id) || null;
     }
   }
 
@@ -254,14 +313,23 @@ class LocalDocumentStoreService implements LocalDocumentStoreInterface {
    * Retrieves the raw file Blob
    */
   async getDocumentBlob(id: string): Promise<Blob | null> {
+    if (!this.active) return null;
     try {
-      const db = await openDatabase();
-      return await new Promise((resolve, reject) => {
+      const db = await this.openDatabase();
+      if (!this.active) {
+        db.close();
+        return null;
+      }
+      const blob = await new Promise<Blob | null>((resolve, reject) => {
         const tx = db.transaction(LOCAL_STORE_CONFIG.STORES.BLOBS, 'readonly');
         const store = tx.objectStore(LOCAL_STORE_CONFIG.STORES.BLOBS);
         const request = store.get(id);
 
         request.onsuccess = () => {
+          if (!this.active) {
+            resolve(null);
+            return;
+          }
           if (request.result && request.result.blob) {
             resolve(request.result.blob);
           } else {
@@ -270,8 +338,10 @@ class LocalDocumentStoreService implements LocalDocumentStoreInterface {
         };
         request.onerror = () => reject(request.error);
       });
+      return this.active ? blob : null;
     } catch {
-      return memoryBlobStore.get(id) || null;
+      if (!(await this.mayUseMemoryFallback())) return null;
+      return this.memoryBlobStore.get(id) || null;
     }
   }
 
@@ -279,31 +349,44 @@ class LocalDocumentStoreService implements LocalDocumentStoreInterface {
    * Retrieves document as ArrayBuffer for PDF.js viewer
    */
   async getDocumentData(id: string): Promise<ArrayBuffer | null> {
+    if (!this.active) return null;
     const blob = await this.getDocumentBlob(id);
-    if (!blob) return null;
-    return await blob.arrayBuffer();
+    if (!blob || !this.active) return null;
+    const data = await blob.arrayBuffer();
+    return this.active ? data : null;
   }
 
   /**
    * Gets all saved documents metadata sorted by lastOpenedAt descending
    */
   async getAllDocuments(): Promise<LocalBookMetadata[]> {
+    if (!this.active) return [];
     try {
-      const db = await openDatabase();
-      return await new Promise((resolve, reject) => {
+      const db = await this.openDatabase();
+      if (!this.active) {
+        db.close();
+        return [];
+      }
+      const documents = await new Promise<LocalBookMetadata[]>((resolve, reject) => {
         const tx = db.transaction(LOCAL_STORE_CONFIG.STORES.METADATA, 'readonly');
         const store = tx.objectStore(LOCAL_STORE_CONFIG.STORES.METADATA);
         const request = store.getAll();
 
         request.onsuccess = () => {
+          if (!this.active) {
+            resolve([]);
+            return;
+          }
           const list: LocalBookMetadata[] = request.result || [];
           list.sort((a, b) => new Date(b.lastOpenedAt).getTime() - new Date(a.lastOpenedAt).getTime());
           resolve(list);
         };
         request.onerror = () => reject(request.error);
       });
+      return this.active ? documents : [];
     } catch {
-      const list = Array.from(memoryMetadataStore.values());
+      if (!(await this.mayUseMemoryFallback())) return [];
+      const list = Array.from(this.memoryMetadataStore.values());
       list.sort((a, b) => new Date(b.lastOpenedAt).getTime() - new Date(a.lastOpenedAt).getTime());
       return list;
     }
@@ -316,8 +399,9 @@ class LocalDocumentStoreService implements LocalDocumentStoreInterface {
     id: string,
     updates: Partial<Omit<LocalBookMetadata, 'id' | 'createdAt'>>
   ): Promise<LocalBookMetadata | null> {
+    if (!this.active) return null;
     const current = await this.getDocumentMetadata(id);
-    if (!current) return null;
+    if (!current || !this.active) return null;
 
     const updated: LocalBookMetadata = {
       ...current,
@@ -326,7 +410,11 @@ class LocalDocumentStoreService implements LocalDocumentStoreInterface {
     };
 
     try {
-      const db = await openDatabase();
+      const db = await this.openDatabase();
+      if (!this.active) {
+        db.close();
+        return null;
+      }
       return await new Promise((resolve, reject) => {
         const tx = db.transaction(LOCAL_STORE_CONFIG.STORES.METADATA, 'readwrite');
         const store = tx.objectStore(LOCAL_STORE_CONFIG.STORES.METADATA);
@@ -336,7 +424,8 @@ class LocalDocumentStoreService implements LocalDocumentStoreInterface {
         request.onerror = () => reject(request.error);
       });
     } catch {
-      memoryMetadataStore.set(id, updated);
+      if (!(await this.mayUseMemoryFallback())) return null;
+      this.memoryMetadataStore.set(id, updated);
       return updated;
     }
   }
@@ -345,8 +434,13 @@ class LocalDocumentStoreService implements LocalDocumentStoreInterface {
    * Deletes a document and its associated binary blob from IndexedDB
    */
   async deleteDocument(id: string): Promise<boolean> {
+    if (!this.active) return false;
     try {
-      const db = await openDatabase();
+      const db = await this.openDatabase();
+      if (!this.active) {
+        db.close();
+        return false;
+      }
       return await new Promise((resolve, reject) => {
         const tx = db.transaction(
           [LOCAL_STORE_CONFIG.STORES.METADATA, LOCAL_STORE_CONFIG.STORES.BLOBS],
@@ -360,9 +454,10 @@ class LocalDocumentStoreService implements LocalDocumentStoreInterface {
         tx.onerror = () => reject(tx.error);
       });
     } catch {
-      const existed = memoryMetadataStore.has(id);
-      memoryMetadataStore.delete(id);
-      memoryBlobStore.delete(id);
+      if (!(await this.mayUseMemoryFallback())) return false;
+      const existed = this.memoryMetadataStore.has(id);
+      this.memoryMetadataStore.delete(id);
+      this.memoryBlobStore.delete(id);
       return existed;
     }
   }
@@ -371,9 +466,15 @@ class LocalDocumentStoreService implements LocalDocumentStoreInterface {
    * Clears all local user documents and blobs
    */
   async clearAllDocuments(): Promise<number> {
+    if (!this.active) return 0;
     const count = (await this.getAllDocuments()).length;
+    if (!this.active) return 0;
     try {
-      const db = await openDatabase();
+      const db = await this.openDatabase();
+      if (!this.active) {
+        db.close();
+        return 0;
+      }
       return await new Promise((resolve, reject) => {
         const tx = db.transaction(
           [LOCAL_STORE_CONFIG.STORES.METADATA, LOCAL_STORE_CONFIG.STORES.BLOBS],
@@ -387,9 +488,10 @@ class LocalDocumentStoreService implements LocalDocumentStoreInterface {
         tx.onerror = () => reject(tx.error);
       });
     } catch {
-      const memoryCount = memoryMetadataStore.size;
-      memoryMetadataStore.clear();
-      memoryBlobStore.clear();
+      if (!(await this.mayUseMemoryFallback())) return 0;
+      const memoryCount = this.memoryMetadataStore.size;
+      this.memoryMetadataStore.clear();
+      this.memoryBlobStore.clear();
       return memoryCount;
     }
   }
@@ -398,6 +500,7 @@ class LocalDocumentStoreService implements LocalDocumentStoreInterface {
    * Saves the student's last read page and updates lastOpenedAt
    */
   async saveLastPage(id: string, pageNumber: number): Promise<void> {
+    if (!this.active) return;
     try {
       await this.updateDocument(id, {
         lastPage: pageNumber,
@@ -419,6 +522,7 @@ class LocalDocumentStoreService implements LocalDocumentStoreInterface {
    * Gets the last read page for a document
    */
   async getLastPage(id: string): Promise<number> {
+    if (!this.active) return 1;
     const doc = await this.getDocumentMetadata(id);
     return doc?.lastPage || 1;
   }
@@ -510,6 +614,13 @@ class LocalDocumentStoreService implements LocalDocumentStoreInterface {
       formattedTotal: formatFileSize(totalBytes),
     };
   }
+}
+
+export function createAccountLocalDocumentStore(
+  userId: AuthenticatedUserId,
+  validateIdentity: AccountIdentityValidator
+): AccountLocalDocumentStore {
+  return new LocalDocumentStoreService(getAccountLocalDatabaseName(userId), false, validateIdentity);
 }
 
 export const localDocumentStore = new LocalDocumentStoreService();

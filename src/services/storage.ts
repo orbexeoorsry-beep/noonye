@@ -1,6 +1,7 @@
 import { Book, AdminBook, LocalBook, StudentProgress, UserNote } from '../types';
 import { AdminBookStore } from './adminBookStore';
 import { INITIAL_PROGRESS } from '../mock-data/progress';
+import { accountStorageKey, type AuthenticatedUserId } from './accountScope';
 
 const STORAGE_KEYS = {
   USER_LOCAL_BOOKS: 'noon_user_local_books_v1',
@@ -217,5 +218,135 @@ export const storageService = {
       console.error('Failed to delete note', e);
     }
   },
+  clearMemoryCache(): void {
+    memoryStorage.clear();
+  },
 };
 
+
+export type AccountStorageAdapter = Pick<Storage, 'getItem' | 'setItem'>;
+
+export interface AccountStorageService {
+  getProgress(): StudentProgress;
+  saveProgress(progress: StudentProgress): void;
+  getNotes(bookId?: string, pageNumber?: number): UserNote[];
+  addNote(note: Omit<UserNote, 'id' | 'createdAt'>): UserNote;
+  deleteNote(noteId: string): void;
+  clearMemoryCache(): void;
+  revoke(): void;
+}
+
+/**
+ * Create storage for a school account identified by the authenticated server session.
+ * This factory intentionally never reads the legacy, unscoped progress or notes keys.
+ */
+export function createAccountStorageService(
+  userId: AuthenticatedUserId,
+  adapter?: AccountStorageAdapter
+): AccountStorageService {
+  const progressKey = accountStorageKey(userId, 'progress_v1');
+  const notesKey = accountStorageKey(userId, 'notes_v1');
+  const fallback = new Map<string, string>();
+  let active = true;
+
+  let persistent: AccountStorageAdapter | null = adapter || null;
+  if (!persistent) {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        persistent = window.localStorage;
+      }
+    } catch {
+      persistent = null;
+    }
+  }
+
+  const read = (key: string): string | null => {
+    if (!active) return null;
+    try {
+      const value = persistent?.getItem(key);
+      if (value !== null && value !== undefined) {
+        fallback.set(key, value);
+        return value;
+      }
+    } catch {
+      // Use the account-specific in-memory fallback.
+    }
+    return fallback.get(key) ?? null;
+  };
+
+  const write = (key: string, value: string): void => {
+    if (!active) return;
+    fallback.set(key, value);
+    try {
+      persistent?.setItem(key, value);
+    } catch {
+      // Keep this fallback scoped to the current account service instance.
+    }
+  };
+
+  return {
+    getProgress(): StudentProgress {
+      const data = read(progressKey);
+      if (data) {
+        try {
+          return JSON.parse(data) as StudentProgress;
+        } catch {
+          // Return a clean initial value for malformed local data.
+        }
+      }
+      return JSON.parse(JSON.stringify(INITIAL_PROGRESS)) as StudentProgress;
+    },
+
+    saveProgress(progress: StudentProgress): void {
+      write(progressKey, JSON.stringify(progress));
+    },
+
+    getNotes(bookId?: string, pageNumber?: number): UserNote[] {
+      const data = read(notesKey);
+      if (!data) return [];
+      try {
+        const notes = JSON.parse(data) as UserNote[];
+        if (!Array.isArray(notes)) return [];
+        if (bookId && pageNumber !== undefined) {
+          return notes.filter((note) => note.bookId === bookId && note.pageNumber === pageNumber);
+        }
+        if (bookId) return notes.filter((note) => note.bookId === bookId);
+        return notes;
+      } catch {
+        return [];
+      }
+    },
+
+    addNote(note: Omit<UserNote, 'id' | 'createdAt'>): UserNote {
+      if (!active) throw new Error('Library session is locked.');
+      const cryptoApi = typeof crypto !== 'undefined' ? crypto : undefined;
+      const id = cryptoApi?.randomUUID
+        ? `note_${cryptoApi.randomUUID()}`
+        : `note_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+      const newNote: UserNote = {
+        ...note,
+        id,
+        createdAt: new Date().toLocaleTimeString('ar-EG', {
+          hour: '2-digit',
+          minute: '2-digit',
+        }),
+      };
+      write(notesKey, JSON.stringify([newNote, ...this.getNotes()]));
+      return newNote;
+    },
+
+    deleteNote(noteId: string): void {
+      if (!active) return;
+      write(notesKey, JSON.stringify(this.getNotes().filter((note) => note.id !== noteId)));
+    },
+
+    clearMemoryCache(): void {
+      fallback.clear();
+    },
+
+    revoke(): void {
+      active = false;
+      fallback.clear();
+    },
+  };
+}

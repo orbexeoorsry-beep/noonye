@@ -1,3 +1,4 @@
+import { isFeatureEnabled } from '../../../config/feature-flags';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { SelectionRegion, SelectionToolId } from '../../selection/types';
 import { aiGateway } from '../services/aiGateway';
@@ -71,7 +72,7 @@ const TOOLS_CONFIG: ToolItem[] = [
     title: 'أعطني تلميحًا',
     badge: 'تلميح',
     icon: Lightbulb,
-    promptDesc: 'توجيه ذكي نحو الحل دون كشفه مباشرة',
+    promptDesc: 'مثال تلميح معدّ مسبقًا',
     mockResponse:
       '💡 فكّر في العلاقة المباشرة بين المتغيرات المذكورة في الجزء المحدد، ولاحظ كيف يؤدي تغيير الطرف الأول إلى التأثير على بقية المعادلة أو النظام العلمي.',
     mockResponseEn:
@@ -117,8 +118,7 @@ const TOOLS_CONFIG: ToolItem[] = [
 ### الحل النهائي
 • السرعة النهائية ع₂ = ١٠ م/ث.
 
-### درجة الثقة
-• 98%`,
+`,
     mockResponseEn:
 `### Given
 • Initial velocity v₁ = 0 m/s (the object starts from rest).
@@ -142,8 +142,7 @@ const TOOLS_CONFIG: ToolItem[] = [
 ### Final Solution
 • Final velocity v₂ = 10 m/s.
 
-### Confidence
-• 98%`,
+`,
   },
   {
     id: 'explainFigure',
@@ -173,8 +172,7 @@ const TOOLS_CONFIG: ToolItem[] = [
 (ب) تتضاعف مرتين
 (الإجابة الصحيحة: أ).
 
-### درجة الثقة
-• 96%`,
+`,
     mockResponseEn:
 `### What Appears in the Element?
 [Stated or visible on page]: A scientific diagram illustrating the pathway of energy transformation and mechanical changes in a closed system.
@@ -197,8 +195,7 @@ Imagine a roller coaster climbing and descending: at the highest peak its potent
 (B) It doubles
 (Correct Answer: A).
 
-### Confidence
-• 96%`,
+`,
   },
 ];
 
@@ -214,12 +211,12 @@ function buildLocalTranslationFallback(
   if (!source) {
     return isEnglish
       ? `### Translation
-A visual region of the page is selected. When Gemini is connected, text inside images and diagrams is read and translated automatically.
+A visual region of the page is selected. Image text translation is currently unavailable.
 
 ### Key Terms & Vocabulary
 • Select a text paragraph or scientific term to extract its meaning and direct translation.`
       : `### الترجمة إلى اللغة العربية
-تم تحديد منطقة بصرية من الصفحة. عند توفر اتصال Gemini، يتم قراءة النصوص من داخل الصورة أو المخطط وترجمتها فوراً إلى اللغة العربية الفصحى.
+تم تحديد منطقة بصرية من الصفحة. ترجمة النصوص داخل الصور غير متاحة حاليًا.
 
 ### المصطلحات والكلمات المفتاحية
 • حدد فقرة نصية أو مصطلحاً علمياً ليتم استخراج معناه وترجمته المباشرة إلى اللغة العربية.`;
@@ -349,8 +346,7 @@ function buildLocalProblemAnalysisFallback(
 ### Final Solution
 • The two roots of the equation are x = 1 and x = 3, and the vertex of the parabola is at (2, -1).
 
-### Confidence
-• 98%`;
+`;
     }
 
     return `### المعطيات
@@ -378,8 +374,7 @@ function buildLocalProblemAnalysisFallback(
 ### الحل النهائي
 • جذرا المعادلة هما: x = 1 و x = 3 ، ورأس المنحنى القطعي المكافئ يقع عند النقطة (2, -1).
 
-### درجة الثقة
-• 98%`;
+`;
   }
 
   // 2. Biology / Sodium-Potassium Pump & Active Transport (Only when actual text mentions it)
@@ -414,8 +409,7 @@ function buildLocalProblemAnalysisFallback(
 ### Final Solution
 • The direct energy source is Adenosine Triphosphate (ATP), and the pump operates at a ratio of 3 Na⁺ ions pumped out for every 2 K⁺ ions pumped in.
 
-### Confidence
-• 97%`;
+`;
     }
 
     return `### المعطيات
@@ -441,8 +435,7 @@ function buildLocalProblemAnalysisFallback(
 ### الحل النهائي
 • المصدر المباشر للطاقة هو جزيء أدينوسين ثلاثي الفوسفات (ATP)، وتعمل المضخة بنسبة (3 أيونات صوديوم للخارج : 2 أيون بوتاسيوم للداخل).
 
-### درجة الثقة
-• 97%`;
+`;
   }
 
   // 3. Geography / Nile Water Shares (Only when actual text mentions Nile tributaries)
@@ -477,8 +470,7 @@ function buildLocalProblemAnalysisFallback(
 ### Final Solution
 • The Ethiopian Highlands contribute 84% of the total Nile water (with the Blue Nile alone providing 59%), while the White Nile contributes 16%.
 
-### Confidence
-• 98%`;
+`;
     }
 
     return `### المعطيات
@@ -504,8 +496,7 @@ function buildLocalProblemAnalysisFallback(
 ### الحل النهائي
 • تساهم هضبة إثيوبيا بنسبة 84% من إجمالي مياه نهر النيل (منها 59% للنيل الأزرق وحده)، بينما يساهم النيل الأبيض بنسبة 16%.
 
-### درجة الثقة
-• 98%`;
+`;
   }
 
   // 4. Grade 9 Mathematics Part 1: Relations, Ordered Pairs, Arrow & Cartesian Diagrams, and Functions (e.g. Page 17 "تأكد من فهمك")
@@ -553,8 +544,7 @@ function buildLocalProblemAnalysisFallback(
 • Q3 Ordered Pairs on X: R = {(-2, -1), (-1, 0), (0, 1), (1, 2)}.
 • Q4 Ordered Pairs ("a is a factor of b"): R = {(1,2), (1,4), (1,6), (1,8), (2,2), (2,4), (2,6), (2,8), (3,6)}.
 
-### Confidence
-• 99%`;
+`;
     }
 
     return `### المعطيات
@@ -589,8 +579,7 @@ function buildLocalProblemAnalysisFallback(
 • ج٣: ع = {(-٢ ، -١) ، (-١ ، ٠) ، (٠ ، ١) ، (١ ، ٢)}.
 • ج٤: ع = {(١، ٢)، (١، ٤)، (١، ٦)، (١، ٨)، (٢، ٢)، (٢، ٤)، (٢، ٦)، (٢، ٨)، (٣، ٦)}.
 
-### درجة الثقة
-• 99%`;
+`;
   }
 
   // 5. Dynamic Curriculum Problem Analysis for any selected textbook question, equation, or passage
@@ -644,8 +633,7 @@ ${givenPoints}
         : `Complete analysis of "${extractedLines[0] || problemTextEn}": All given elements have been broken down and solved according to the lesson principles on Page (${pageNumber}).`
     }
 
-### Confidence
-• 96%`;
+`;
   }
 
   const problemTextAr =
@@ -686,8 +674,7 @@ ${givenPointsAr}
       : `تم تحليل وحل «${extractedLines[0] || problemTextAr}» بتفكيك معطياته وربطها المباشر بقاعدة الدرس في الصفحة (${pageNumber}).`
   }
 
-### درجة الثقة
-• 96%`;
+`;
 }
 
 export interface SelectionAssistantPanelProps {
@@ -708,7 +695,13 @@ export interface SelectionAssistantPanelProps {
   lessonContext?: string;
 }
 
-export const SelectionAssistantPanel: React.FC<SelectionAssistantPanelProps> = ({
+// Do not mount effects, local mock output, or request logic while disabled.
+export const SelectionAssistantPanel: React.FC<SelectionAssistantPanelProps> = (props) => {
+  if (!isFeatureEnabled('aiAssistantEnabled')) return null;
+  return <EnabledSelectionAssistantPanel {...props} />;
+};
+
+const EnabledSelectionAssistantPanel: React.FC<SelectionAssistantPanelProps> = ({
   isOpen,
   onClose,
   pageNumber,
@@ -912,7 +905,7 @@ export const SelectionAssistantPanel: React.FC<SelectionAssistantPanelProps> = (
             contextLines[0] || sourceSnippet.slice(0, 140)
           }" and substitute the given values step by step to verify which elements satisfy the condition.`;
         }
-        return `💡 **تلميح ذكي (${currentLessonTitle || `صفحة ${currentPageNum}`}):** ركّز على القاعدة الأساسية في الدرس: «${
+        return `💡 **تلميح تجريبي (${currentLessonTitle || `صفحة ${currentPageNum}`}):** ركّز على القاعدة الأساسية في الدرس: «${
           contextLines[0] || sourceSnippet.slice(0, 140)
         }»، ثم طبّق الشرط المعطى على كل عنصر خطوة بخطوة للوصول إلى النتيجة الصحيحة.`;
       }
@@ -1147,9 +1140,9 @@ export const SelectionAssistantPanel: React.FC<SelectionAssistantPanelProps> = (
               <h3 className="font-extrabold text-slate-900 text-sm sm:text-base leading-tight">
                 {t.aiAssistant?.panelTitle || 'أدوات نون'}
               </h3>
-              {isGeminiPowered && (
+              {false && (
                 <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200/80 px-2 py-0.5 rounded-full">
-                  {t.aiAssistant?.geminiBadge || 'Gemini'}
+                  {t.aiAssistant?.localMockBadge || 'Experimental demo'}
                 </span>
               )}
             </div>
@@ -1282,9 +1275,7 @@ export const SelectionAssistantPanel: React.FC<SelectionAssistantPanelProps> = (
             </h4>
           </div>
           <span className="text-[10px] text-slate-400 font-medium">
-            {isGeminiPowered
-              ? t.aiAssistant?.geminiPoweredBadge || (isEnglish ? 'Smart Analysis via Gemini' : 'تحليل ذكي عبر Gemini')
-              : t.aiAssistant?.localMockBadge || (isEnglish ? 'Local Curriculum Analysis' : 'رد تجريبي محلي')}
+            {isEnglish ? 'Experimental local example' : 'مثال محلي تجريبي'}
           </span>
         </div>
 
@@ -1422,14 +1413,7 @@ export const SelectionAssistantPanel: React.FC<SelectionAssistantPanelProps> = (
         <div className="p-3 rounded-xl bg-slate-100/70 border border-slate-200/80 text-[11px] text-slate-500 flex items-start gap-2">
           <HelpCircle className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
           <p className="leading-relaxed">
-            {isGeminiPowered
-              ? t.aiAssistant?.disclaimer ||
-                (isEnglish
-                  ? 'Analyzed via AI Gateway according to Noon educational rules without altering equation symbols or textbook content.'
-                  : 'تم التحليل عبر AI Gateway وفق القواعد التربوية الصارمة لنون دون تحريف لرموز المسألة أو محتوى الكتاب.')
-              : isEnglish
-              ? 'Analyzed using Noon curriculum engine. When Gemini is available on the server, live AI generation is used automatically.'
-              : 'يعمل المساعد حالياً بالوضع التجريبي المحلي. عند توفر مفتاح Gemini على الخادم، سيتم التوليد الفوري والمخصص.'}
+            {isEnglish ? 'Experimental preset content, not AI output or a learning assessment. Assistant features are unavailable.' : 'محتوى تجريبي معدّ مسبقًا، وليس مخرجات ذكاء اصطناعي أو تقييمًا للتعلم. المساعد غير متاح.'}
           </p>
         </div>
       </div>

@@ -3,14 +3,32 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "engines": {
+    "node": "^22.13.0 || >=24.0.0"
+  },
+  "overrides": {
+    "body-parser": "1.20.9"
+  },
   "scripts": {
     "dev": "tsx server.ts",
-    "start": "tsx server.ts",
-    "build": "vite build && esbuild server.ts --platform=node --format=esm --packages=external --define:process.env.NODE_ENV=\"\\\"production\\\"\" --outfile=dist/server.js",
+    "start": "node dist/server.js",
+    "build": "vite build && node scripts/generate-pwa-sw.mjs && esbuild server.ts --bundle --platform=node --format=esm --packages=external --define:process.env.NODE_ENV=\"\\\"production\\\"\" --outfile=dist/server.js",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
-    "test": "tsx tests/pdf-viewer.test.ts",
-    "lint": "tsc --noEmit"
+    "test": "npm run build && npm run test:accounts && npm run test:release-safety && npm run test:body-parser-security && npm run test:dashboard-validation && tsx --test tests/accounts-path-http.test.ts && tsx tests/assistant-off.test.ts && npm run test:accounts-browser && npm run test:role-dashboards-browser && npm run test:assistant-browser && tsx tests/pdf-viewer.test.ts && tsx --test tests/quiz-copy.test.ts && tsx --test tests/ai-ui-copy.test.ts && npm run test:pwa-browser",
+    "test:accounts": "tsx --test --test-concurrency=1 tests/accounts.test.ts tests/accounts-config.test.ts tests/accounts-security.test.ts tests/dashboards.test.ts tests/account-local-isolation.test.ts tests/pdf-loading-cancel.test.ts",
+    "test:release-safety": "tsx --test --test-concurrency=1 tests/schema-safety.test.ts tests/account-http-policy.test.ts",
+    "test:body-parser-security": "node --test tests/body-parser-security.test.mjs",
+    "test:dashboard-validation": "tsx tests/dashboard-validation.test.ts",
+    "test:accounts-path-http": "npm run build && tsx --test tests/accounts-path-http.test.ts",
+    "test:accounts-browser": "tsx --test tests/accounts-browser.test.ts",
+    "test:role-dashboards-browser": "tsx --test tests/role-dashboards-browser.test.ts",
+    "accounts:bootstrap": "tsx scripts/bootstrap-school.ts",
+    "lint": "tsc --noEmit",
+    "test:pwa-browser": "node tests/pwa-browser.test.mjs",
+    "test:assistant-browser": "node tests/assistant-browser.test.mjs",
+    "test:assistant-off": "npm run build && tsx tests/assistant-off.test.ts",
+    "test:schools:rc": "npm run lint && npm run build && npm run test:release-safety && tsx --test --test-concurrency=1 tests/accounts.test.ts tests/accounts-config.test.ts tests/accounts-security.test.ts tests/dashboards.test.ts tests/accounts-path-http.test.ts tests/persistent-storage.test.ts tests/production-security.test.ts tests/sqlite-snapshot.test.ts tests/quiz-copy.test.ts tests/ai-ui-copy.test.ts tests/account-local-isolation.test.ts tests/pdf-loading-cancel.test.ts && tsx tests/dashboard-validation.test.ts && tsx tests/assistant-off.test.ts && tsx --test --test-concurrency=1 tests/accounts-browser.test.ts tests/role-dashboards-browser.test.ts && node tests/assistant-browser.test.mjs"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
@@ -34,6 +52,7 @@
     "tailwindcss": "^4.3.3",
     "tsx": "^4.21.0",
     "typescript": "^7.0.2",
-    "@types/express": "^4.17.21"
+    "@types/express": "^4.17.21",
+    "playwright-core": "1.64.1"
   }
 }

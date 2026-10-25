@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Book, InteractiveElement, UserNote } from '../../types';
 import { useI18n } from '../../i18n';
-import { pdfService } from '../../services/pdfService';
-import { localDocumentStore } from '../../services/localDocumentStore';
+import { isFeatureEnabled } from '../../config/feature-flags';
+import { cancelPdfLoad, pdfService } from '../../services/pdfService';
+import type { LocalDocumentStoreInterface } from '../../services/local-document-store/types';
 import { generateEducationalSamplePdf } from '../../services/samplePdfGenerator';
 import { bookLessonsService, BookLesson } from '../../services/bookLessonsService';
 import { LessonsBar } from './LessonsBar';
@@ -11,7 +12,7 @@ import { LessonSummaryModal } from './LessonSummaryModal';
 import { PdfPageView } from './PdfPageView';
 import { NotesDrawer } from './NotesDrawer';
 import { NoonToolsPanel } from '../ai-assistant/NoonToolsPanel';
-import { storageService } from '../../services/storage';
+import type { AccountStorageService } from '../../services/storage';
 import {
   PdfSelectionLayer,
   SelectionRegion,
@@ -28,6 +29,8 @@ interface PdfViewerProps {
   onDeleteBook?: (bookId: string) => void;
   onUpdatePageNumber: (bookId: string, pageNum: number) => void;
   onQuizCompleted: (isCorrect: boolean) => void;
+  documents: LocalDocumentStoreInterface;
+  storage: AccountStorageService;
 }
 
 export const PdfViewer: React.FC<PdfViewerProps> = ({
@@ -36,14 +39,20 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
   onDeleteBook,
   onUpdatePageNumber,
   onQuizCompleted,
+  documents,
+  storage,
 }) => {
   const { t, format, isRTL } = useI18n();
+  const aiAssistantEnabled = isFeatureEnabled('aiAssistantEnabled');
   const containerRef = useRef<HTMLDivElement>(null);
   const panContainerRef = useRef<HTMLDivElement>(null);
   const canvasMapRef = useRef<Map<number, HTMLCanvasElement>>(new Map());
 
   // PDF Document & Page State
   const [pdfDoc, setPdfDoc] = useState<pdfjsLib.PDFDocumentProxy | null>(null);
+  const pdfDocRef = useRef<pdfjsLib.PDFDocumentProxy | null>(null);
+  const pdfLoadEpochRef = useRef(0);
+  const pdfLoadAbortRef = useRef<AbortController | null>(null);
   const [currentPage, setCurrentPage] = useState<number>(book.currentPage || 1);
   const [totalPages, setTotalPages] = useState<number>(book.totalPages || 3);
   const [scale, setScale] = useState<number>(1.0);
@@ -300,6 +309,10 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
 
   // Load PDF Document & extract structured curriculum lessons
   const loadPdf = useCallback(async () => {
+    cancelPdfLoad(pdfLoadAbortRef.current);
+    const abortController = new AbortController();
+    pdfLoadAbortRef.current = abortController;
+    const epoch = ++pdfLoadEpochRef.current;
     setIsLoadingDoc(true);
     setLoadError(null);
 
@@ -308,17 +321,16 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
       let data: ArrayBuffer | Uint8Array | string | null = null;
 
       if (currentBook.source === 'local') {
-        data = await localDocumentStore.getDocumentData(currentBook.id);
-        if (!data) {
-          const generated = generateEducationalSamplePdf();
-          data = generated.buffer as ArrayBuffer;
-        }
+        data = await documents.getDocumentData(currentBook.id);
+        if (!data) throw new Error(t.viewer.invalidFileError);
       } else if ('pdfUrl' in currentBook && currentBook.pdfUrl) {
         data = currentBook.pdfUrl;
       } else {
         const generated = generateEducationalSamplePdf();
         data = generated.buffer as ArrayBuffer;
       }
+
+      if (epoch !== pdfLoadEpochRef.current || abortController.signal.aborted) return;
 
       if (!data || (typeof data !== 'string' && data.byteLength === 0)) {
         throw new Error(t.viewer.invalidFileError);
@@ -328,7 +340,16 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
         throw new Error(t.viewer.fileTooLargeError);
       }
 
-      const doc = await pdfService.loadDocument(data);
+      const doc = await pdfService.loadDocument(data, abortController.signal);
+      if (epoch !== pdfLoadEpochRef.current) {
+        void pdfService.destroyDocument(doc).catch(() => undefined);
+        return;
+      }
+      const previousDoc = pdfDocRef.current;
+      if (previousDoc && previousDoc !== doc) {
+        void pdfService.destroyDocument(previousDoc).catch(() => undefined);
+      }
+      pdfDocRef.current = doc;
       setPdfDoc(doc);
       setTotalPages(doc.numPages);
 
@@ -339,10 +360,12 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
 
       // Extract Book Lessons (from curriculum database, outline, table of contents, or dynamic page scanning)
       const extractedLessons = await bookLessonsService.extractLessonsFromBook(currentBook, doc);
+      if (epoch !== pdfLoadEpochRef.current) return;
       setLessons(extractedLessons);
       const initialLesson = bookLessonsService.findLessonForPage(extractedLessons, initialPage);
       setActiveLesson(initialLesson);
     } catch (err: unknown) {
+      if (epoch !== pdfLoadEpochRef.current || abortController.signal.aborted) return;
       console.error('Failed to load PDF', err);
       const errMsg = err instanceof Error ? err.message : String(err);
       if (errMsg.includes('Invalid PDF') || errMsg.includes('corrupted')) {
@@ -353,12 +376,21 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
         setLoadError(t.viewer.invalidFileError);
       }
     } finally {
-      setIsLoadingDoc(false);
+      if (epoch === pdfLoadEpochRef.current) setIsLoadingDoc(false);
+      if (pdfLoadAbortRef.current === abortController) pdfLoadAbortRef.current = null;
     }
-  }, [book.id, t.viewer.invalidFileError, t.viewer.fileTooLargeError]);
+  }, [book.id, documents, t.viewer.invalidFileError, t.viewer.fileTooLargeError]);
 
   useEffect(() => {
-    loadPdf();
+    void loadPdf();
+    return () => {
+      pdfLoadEpochRef.current += 1;
+      cancelPdfLoad(pdfLoadAbortRef.current);
+      pdfLoadAbortRef.current = null;
+      const currentDoc = pdfDocRef.current;
+      pdfDocRef.current = null;
+      if (currentDoc) void pdfService.destroyDocument(currentDoc).catch(() => undefined);
+    };
   }, [loadPdf]);
 
   // Keep activeLesson synchronized with currentPage
@@ -455,16 +487,16 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
     if (currentPage > 0) {
       if (lastSavedPageRef.current !== currentPage) {
         lastSavedPageRef.current = currentPage;
-        localDocumentStore.saveLastPage(book.id, currentPage);
+        documents.saveLastPage(book.id, currentPage);
         onUpdatePageNumber(book.id, currentPage);
       }
-      const pageNotes = storageService.getNotes(book.id, currentPage);
+      const pageNotes = storage.getNotes(book.id, currentPage);
       setNotes((prev) => {
         if (prev.length === 0 && pageNotes.length === 0) return prev;
         return pageNotes;
       });
     }
-  }, [book.id, currentPage, onUpdatePageNumber]);
+  }, [book.id, currentPage, documents, onUpdatePageNumber, storage]);
 
   // Clean up toast timeout on unmount
   useEffect(() => {
@@ -489,14 +521,14 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
     );
   }, []);
 
-  // Launch Gemini student quiz for single lesson or multiple selected lessons
+  // Launch local student quiz for single lesson or multiple selected lessons
   const handleStartQuiz = useCallback((lessonsToTest: BookLesson[]) => {
     if (!lessonsToTest || lessonsToTest.length === 0) return;
     setQuizTargetLessons(lessonsToTest);
     setIsLessonQuizOpen(true);
   }, []);
 
-  // Launch Gemini student lesson summary for single or multiple selected lessons
+  // Launch local student lesson summary for single or multiple selected lessons
   const handleStartSummary = useCallback((lessonsToSummarize: BookLesson[]) => {
     if (!lessonsToSummarize || lessonsToSummarize.length === 0) return;
     setSummaryTargetLessons(lessonsToSummarize);
@@ -613,11 +645,9 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
     }
   }, []);
 
-  const handleActionClick = useCallback((action: SelectionActionType, pNum: number) => {
-    setActiveSelectionPage(pNum);
-    handleSelectionAction(action, pNum);
-  }, [handleSelectionAction]);
-
+  const handleActionClick = useCallback((_action: SelectionActionType, _pNum: number) => {
+    // Assistant actions are intentionally disabled by the P0 hotfix.
+  }, []);
   const handleSetCanvasRef = useCallback((pNum: number, canvas: HTMLCanvasElement | null) => {
     if (canvas) {
       canvasMapRef.current.set(pNum, canvas);
@@ -627,35 +657,8 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
   }, []);
 
   const handleOpenNoonTools = () => {
-    if (!selection) {
-      const autoSelection: SelectionRegion = {
-        xPct: 4,
-        yPct: 6,
-        widthPct: 92,
-        heightPct: 88,
-        pageNumber: currentPage,
-        endPageNumber: currentPage,
-      };
-      setIsSelectionModeEnabled(true);
-      setActiveSelectionPage(currentPage);
-      setSelection(autoSelection);
-      const crop = getSelectedCropBase64(autoSelection, currentPage);
-      if (crop) {
-        setSelectedImage(crop);
-      } else if (pdfDoc) {
-        pdfService
-          .renderPageToDataUrl(pdfDoc, currentPage, autoSelection, 1400)
-          .then((url) => {
-            if (url) setSelectedImage(url);
-          });
-      }
-      setIsSelectionPanelOpen(true);
-      setSelectionActionNonce((n) => n + 1);
-      return;
-    }
-    setIsSelectionPanelOpen(true);
+    // Assistant entry point is intentionally disabled by the P0 hotfix.
   };
-
   // Zoom Operations
   const handleZoomIn = () => {
     setScale((prev) => Math.min(2.5, +(prev + 0.15).toFixed(2)));
@@ -674,13 +677,14 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
 
   // Element Selection
   const handleSelectElement = useCallback((elem: InteractiveElement) => {
+    if (!aiAssistantEnabled) return;
     setSelectedElement(elem);
     setIsAiToolsOpen(true);
-  }, []);
+  }, [aiAssistantEnabled]);
 
   // Notes
   const handleAddNote = (text: string) => {
-    const newNote = storageService.addNote({
+    const newNote = storage.addNote({
       bookId: book.id,
       pageNumber: currentPage,
       text,
@@ -689,13 +693,13 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
   };
 
   const handleDeleteNote = (noteId: string) => {
-    storageService.deleteNote(noteId);
+    storage.deleteNote(noteId);
     setNotes((prev) => prev.filter((n) => n.id !== noteId));
   };
 
   // Delete Book
   const handleDeleteBookConfirmed = async () => {
-    await localDocumentStore.deleteDocument(book.id);
+    await documents.deleteDocument(book.id);
     if (onDeleteBook) {
       onDeleteBook(book.id);
     } else {
@@ -841,6 +845,9 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
             <button
               type="button"
               onClick={handleOpenNoonTools}
+              disabled
+              aria-disabled="true"
+              title="Assistant temporarily unavailable"
               className={`min-h-[44px] px-3.5 sm:px-4 rounded-xl flex items-center gap-1.5 sm:gap-2 text-xs font-bold transition-all shadow-xs active:scale-[0.98] motion-reduce:transform-none focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-indigo-400 ${
                 isSelectionPanelOpen
                   ? 'bg-indigo-700 text-white ring-2 ring-indigo-400'
@@ -1012,7 +1019,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
                     isSelectionModeEnabled={isSelectionModeEnabled}
                     selectedElementId={selectedElement?.id || null}
                     onSelectElement={handleSelectElement}
-                    isOverlayEnabled={isOverlayEnabled}
+                    isOverlayEnabled={aiAssistantEnabled && isOverlayEnabled}
                     onPageIntersect={handlePageIntersect}
                     setCanvasRef={handleSetCanvasRef}
                   />
@@ -1033,7 +1040,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
         </div>
 
         {/* Selection-Linked Noon Assistant Panel with Full Lesson Context */}
-        {isSelectionPanelOpen && (
+        {aiAssistantEnabled && isSelectionPanelOpen && (
           <SelectionAssistantPanel
             isOpen={isSelectionPanelOpen}
             onClose={() => setIsSelectionPanelOpen(false)}
@@ -1069,13 +1076,13 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
 
       {/* Noon Tools AI Assistant Sheet / Sidebar */}
       <NoonToolsPanel
-        isOpen={isAiToolsOpen}
+        isOpen={aiAssistantEnabled && isAiToolsOpen}
         onClose={() => setIsAiToolsOpen(false)}
         selectedElement={selectedElement}
         onQuizCompleted={onQuizCompleted}
       />
 
-      {/* Gemini Student Lesson Quiz Modal (Single Lesson or Multiple Lessons) */}
+      {/* Local Student Lesson Quiz Modal (Single Lesson or Multiple Lessons) */}
       <LessonQuizModal
         isOpen={isLessonQuizOpen}
         onClose={() => setIsLessonQuizOpen(false)}
@@ -1085,7 +1092,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
         onQuizCompleted={onQuizCompleted}
       />
 
-      {/* Gemini Student Lesson Summary Modal (Single Lesson or Multiple Lessons) */}
+      {/* Local Student Lesson Summary Modal (Single Lesson or Multiple Lessons) */}
       <LessonSummaryModal
         isOpen={isSummaryOpen}
         onClose={() => setIsSummaryOpen(false)}

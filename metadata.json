@@ -1,6 +1,6 @@
 {
   "name": "نون | Noon Learning",
-  "description": "منصة تعلم عربية تعرض الكتاب الأصلي كما هو، مع مساعد ذكي يساعد الطالب على فهم الفقرات والصور والمعادلات دون تغيير شكل الكتاب.",
+  "description": "منصة لقراءة الكتب المدرسية بصيغتها الأصلية، مع حفظ الملفات والملاحظات محليًا على الجهاز. أدوات الشرح والاختبار غير متاحة حاليًا.",
   "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "majorCapabilities": []
 }

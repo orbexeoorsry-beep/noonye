@@ -1,3 +1,5 @@
+import { accountDatabaseName, type AuthenticatedUserId } from '../accountScope';
+
 /**
  * Local Document Store Configuration
  * Centralized settings for local user PDF storage
@@ -15,6 +17,11 @@ export const LOCAL_STORE_CONFIG = {
   ALLOWED_MIME_TYPES: ['application/pdf', 'application/x-pdf'],
   SOURCE_TYPE: 'local-user-book' as const,
 };
+
+/** A separate database name for records written in an authenticated school session. */
+export function getAccountLocalDatabaseName(userId: AuthenticatedUserId): string {
+  return accountDatabaseName(userId);
+}
 
 export function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} بايت`;

@@ -14,6 +14,7 @@
 import { generateEducationalSamplePdf } from '../src/services/samplePdfGenerator';
 import { localDocumentStore } from '../src/services/localDocumentStore';
 import { storageService } from '../src/services/storage';
+import { normalizePdfSource } from '../src/services/pdfService';
 
 async function runTests() {
   console.log('🧪 Starting Noon Learning PDF Viewer Test Suite...\n');
@@ -30,6 +31,15 @@ async function runTests() {
     }
   }
 
+  // Blob normalization regression: PDF.js must receive binary data, never Blob.
+  try {
+    const expected = generateEducationalSamplePdf();
+    const blobPdf = new Blob([expected.buffer.slice(expected.byteOffset, expected.byteOffset + expected.byteLength) as ArrayBuffer], { type: 'application/pdf' });
+    const normalized = await normalizePdfSource(blobPdf);
+    assert(normalized instanceof Uint8Array && normalized.length === expected.length && normalized[0] === expected[0], 'Converts Blob PDF source to Uint8Array');
+  } catch (e) {
+    assert(false, `Blob PDF conversion failed: ${e}`);
+  }
   // Test 1: Generate valid educational PDF
   try {
     const pdfData = generateEducationalSamplePdf();
@@ -368,7 +378,7 @@ async function runTests() {
     assert(false, `bookLessonsService test failed: ${e}`);
   }
 
-  // Test 15: Gemini Student Lesson Quiz & Evaluation Verification
+  // Test 15: Local practice quiz and descriptive scoring (synthetic book metadata only)
   try {
     const { lessonQuizService } = await import('../src/services/lessonQuizService.js');
     const { bookLessonsService } = await import('../src/services/bookLessonsService.js');
@@ -386,13 +396,13 @@ async function runTests() {
     const singleLessonQuiz = lessonQuizService.getQuestionsForLessons([lessons[0]]);
     assert(singleLessonQuiz.length >= 5, 'Generates full curriculum quiz for single lesson (5+ questions)');
     assert(singleLessonQuiz[0].options.length === 4, 'Quiz questions have 4 multiple-choice options');
-    assert(Boolean(singleLessonQuiz[0].hint && singleLessonQuiz[0].explanation), 'Quiz questions include Gemini hint and explanation');
+    assert(Boolean(singleLessonQuiz[0].hint && singleLessonQuiz[0].explanation), 'Local practice questions include hint and explanation');
 
     // Multiple lessons quiz (الدرس الأول + الدرس الثاني)
     const multiLessonQuiz = lessonQuizService.getQuestionsForLessons([lessons[0], lessons[2]]);
     assert(multiLessonQuiz.length >= 8, 'Generates comprehensive quiz across multiple selected lessons (8+ questions)');
 
-    // Test scoring & evaluation with Gemini pedagogical feedback
+    // Score describes the answered sample questions only, not curriculum mastery.
     const fakeAnswers: Record<string, number> = {};
     singleLessonQuiz.forEach((q, idx) => {
       fakeAnswers[q.id] = q.correctIndex;
@@ -400,7 +410,7 @@ async function runTests() {
     const result = lessonQuizService.evaluateQuiz(singleLessonQuiz, fakeAnswers);
     assert(result.scorePercent === 100, 'Calculates 100% score for perfect answers');
     assert(result.gradeBadge === 'excellent', 'Assigns excellent grade badge for top score');
-    assert(Boolean(result.geminiFeedback && result.geminiFeedback.includes('متقن')), 'Includes Gemini pedagogical feedback');
+    assert(Boolean(result.geminiFeedback.includes('أسئلة التدريب المحلية') && result.geminiFeedback.includes('لا تقيس النتيجة مستوى التعلم العام') && !/جيمني|إتقان|متقن/.test(result.geminiFeedback)), 'Local practice feedback disclaims overall learning and makes no Gemini or mastery claim');
     assert(result.answers.length === singleLessonQuiz.length, 'Includes full question-by-question breakdown in result');
 
     // Test 16: Universal Support for ANY Book (Biology, Math, Uploaded PDFs)

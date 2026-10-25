@@ -55,119 +55,16 @@ class AIGatewayService {
     signal?: AbortSignal
   ): Promise<AIGatewayResponse> {
     const isEn = params.language === 'en';
-
-    // 1. فحص الحد الأقصى لعدد الطلبات أثناء الجلسة
-    if (this.sessionRequestCount >= MAX_REQUESTS_PER_SESSION) {
-      return {
-        success: false,
-        text: '',
-        isGeminiPowered: false,
-        errorMessage: isEn
-          ? 'Session request limit reached. You can continue reading freely.'
-          : 'تم بلوغ الحد الأقصى لطلبات المساعد في هذه الجلسة. يمكنك متابعة قراءة الكتاب بحرية.',
-        canRetry: false,
-      };
-    }
-
-    // 2. فحص ومنع تكرار المحاولات اللانهائي
-    if (this.consecutiveFailures >= MAX_CONSECUTIVE_RETRIES) {
-      return {
-        success: false,
-        text: '',
-        isGeminiPowered: false,
-        errorMessage: isEn
-          ? 'Connection retries exhausted. Using local educational explanation.'
-          : 'تم استنفاد محاولات إعادة الاتصال. يرجى الانتظار قليلاً أو الاعتماد على الشرح المحلي.',
-        canRetry: false,
-      };
-    }
-
-    this.sessionRequestCount += 1;
-
-    try {
-      const response = await fetch('/api/assistant/explain', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          tool: toolName,
-          selectedText: params.selectedText || '',
-          selectedImage: params.selectedImage || '',
-          nearbyText: params.nearbyText || '',
-          pageNumber: params.pageNumber,
-          selectionType: params.selectionType,
-          elementType: params.elementType || params.selectionType,
-          bookTitle: params.bookTitle || '',
-          lessonTitle: params.lessonTitle || '',
-          lessonContext: params.lessonContext || '',
-          studentLevel: params.studentLevel || 'المرحلة المتوسطة',
-          language: params.language || 'ar',
-          targetLanguage: params.targetLanguage || 'ar',
-          hintIndex: params.hintIndex || 1,
-          requestSolution: Boolean(params.requestSolution),
-        }),
-        signal,
-      });
-
-      if (!response.ok) {
-        throw new Error('فشل استجابة خادم المساعد');
-      }
-
-      const data = await response.json();
-
-      // حالة النجاح
-      if (data.success && data.text) {
-        this.consecutiveFailures = 0; // تصفير عداد الإخفاق
-        return {
-          success: true,
-          text: data.text,
-          isGeminiPowered: true,
-          canRetry: true,
-        };
-      }
-
-      // حالة عدم توفر مفتاح Gemini على الخادم (محاكاة محلية آمنة)
-      if (data.isGeminiReady === false) {
-        this.consecutiveFailures = 0;
-        return {
-          success: false,
-          text: '',
-          isGeminiPowered: false,
-          errorMessage: data.message || 'خدمة الذكاء الاصطناعي غير متصلة حالياً.',
-          canRetry: false,
-        };
-      }
-
-      // إخفاق من جهة النموذج
-      this.consecutiveFailures += 1;
-      const reachedRetryLimit = this.consecutiveFailures >= MAX_CONSECUTIVE_RETRIES;
-      return {
-        success: false,
-        text: '',
-        isGeminiPowered: false,
-        errorMessage:
-          data.error || 'حدث خطأ أثناء معالجة الطلب عبر Gemini. يرجى المحاولة مرة أخرى.',
-        canRetry: !reachedRetryLimit,
-      };
-    } catch (err: unknown) {
-      if (err instanceof Error && err.name === 'AbortError') {
-        throw err;
-      }
-
-      this.consecutiveFailures += 1;
-      const reachedRetryLimit = this.consecutiveFailures >= MAX_CONSECUTIVE_RETRIES;
-
-      return {
-        success: false,
-        text: '',
-        isGeminiPowered: false,
-        errorMessage: reachedRetryLimit
-          ? 'تعذر الوصول لخدمة المساعد وتم استنفاد محاولات إعادة الاتصال. كتابك وملاحظاتك تعمل بشكل طبيعي.'
-          : 'تعذر الاتصال بخدمة المساعد. يرجى التأكد من الاتصال وإعادة المحاولة.',
-        canRetry: !reachedRetryLimit,
-      };
-    }
+    void toolName;
+    void params;
+    void signal;
+    return {
+      success: false,
+      text: '',
+      isGeminiPowered: false,
+      errorMessage: isEn ? 'Assistant is temporarily unavailable.' : 'المساعد غير متاح حالياً.',
+      canRetry: false,
+    };
   }
 
   /**

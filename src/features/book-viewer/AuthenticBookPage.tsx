@@ -1,4 +1,5 @@
 import React from 'react';
+import { isFeatureEnabled } from '../../config/feature-flags';
 import { Book, BookPage, InteractiveElement } from '../../types';
 import { Sparkles, HelpCircle, Layers, CheckCircle2 } from 'lucide-react';
 
@@ -17,6 +18,7 @@ export const AuthenticBookPage: React.FC<AuthenticBookPageProps> = ({
   onSelectElement,
   scale,
 }) => {
+  const aiAssistantEnabled = isFeatureEnabled('aiAssistantEnabled');
   return (
     <div
       className="bg-white shadow-xl mx-auto rounded-md border border-slate-300 transition-transform origin-top duration-150 select-text"
@@ -60,11 +62,14 @@ export const AuthenticBookPage: React.FC<AuthenticBookPageProps> = ({
           return (
             <div
               key={elem.id}
-              onClick={() => onSelectElement(elem)}
-              role="button"
-              tabIndex={0}
+              onClick={() => { if (aiAssistantEnabled) onSelectElement(elem); }}
+              role={aiAssistantEnabled ? 'button' : undefined}
+              tabIndex={aiAssistantEnabled ? 0 : undefined}
               onKeyDown={(e) => {
-                if (e.key === 'Enter') onSelectElement(elem);
+                if (aiAssistantEnabled && (e.key === 'Enter' || e.key === ' ')) {
+                  e.preventDefault();
+                  onSelectElement(elem);
+                }
               }}
               className={`relative rounded-xl p-4 transition-all cursor-pointer text-right group ${
                 isSelected
@@ -73,7 +78,7 @@ export const AuthenticBookPage: React.FC<AuthenticBookPageProps> = ({
               }`}
             >
               {/* Subtle Tool Hover Callout Badge */}
-              <div
+              {aiAssistantEnabled && <div
                 className={`absolute top-2 left-2 flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-md transition-opacity ${
                   isSelected
                     ? 'bg-indigo-600 text-white opacity-100'
@@ -82,7 +87,7 @@ export const AuthenticBookPage: React.FC<AuthenticBookPageProps> = ({
               >
                 <Sparkles className="w-3 h-3" />
                 <span>أدوات نون</span>
-              </div>
+              </div>}
 
               {/* Element Header */}
               {elem.badge && (
@@ -333,7 +338,7 @@ export const AuthenticBookPage: React.FC<AuthenticBookPageProps> = ({
                   </p>
                   <div className="text-xs font-semibold text-amber-900 flex items-center gap-1">
                     <CheckCircle2 className="w-3.5 h-3.5 text-amber-700" />
-                    <span>انقر لتفكيك المعطيات والحصول على تلميحات ذكية</span>
+                    <span>مثال من محتوى الصفحة</span>
                   </div>
                 </div>
               )}
