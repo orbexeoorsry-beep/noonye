@@ -119,7 +119,7 @@ test('database permissions are 0600 and unsupported schema versions are rejected
     assert.equal(statSync(f.dbPath).mode & 0o777, 0o600);
     const { DatabaseSync } = await import('node:sqlite');
     const db = new DatabaseSync(f.dbPath);
-    db.exec('PRAGMA user_version=2'); db.close();
+    db.exec('PRAGMA user_version=3'); db.close();
     assert.throws(() => new AccountStore(f.dbPath), (e: unknown) => e instanceof AccountError && e.code === 'unsupported_schema_version' && e.status === 500);
   } finally { rmSync(f.dir, { recursive: true, force: true }); }
 });
