@@ -40,7 +40,7 @@ async function startServer() {
     }
     next();
   });
-  app.use('/api', createAccountsRouter({ ...accounts, store: accountStore }));
+  app.use('/api', createAccountsRouter({ ...accounts, store: accountStore, temporaryPasswordResetSecret: process.env.NOON_TEMP_PASSWORD_RESET_SECRET }));
   app.use(express.json({ limit: '5mb' }));
   app.get('/api/health', (_req: Request, res: Response) => {
     res.json({ status: 'ok', assistantAvailable: false });

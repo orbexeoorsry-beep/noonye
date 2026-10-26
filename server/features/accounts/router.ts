@@ -1,10 +1,10 @@
 import express, { type Request, type Response, type NextFunction } from 'express';
 import { timingSafeEqual } from 'node:crypto';
-import { AccountError, AccountStore, csrfFor, validateCredentials } from './store';
+import { AccountError, AccountStore, csrfFor, isStrongResetSecret, validateCredentials } from './store';
 import { ClassroomStore } from '../classrooms/store';
 import { DashboardStore } from '../dashboards/store';
 
-export interface AccountsOptions { store?: AccountStore; origin: string; enabled: boolean; mode?: 'proxy-production'; proxyAddress?: string }
+export interface AccountsOptions { store?: AccountStore; origin: string; enabled: boolean; mode?: 'proxy-production'; proxyAddress?: string; temporaryPasswordResetSecret?: string }
 function sessionToken(req: Request, cookie: string) {
   const values = (req.headers.cookie || '').split(';').map(v => v.trim()).filter(v => v.startsWith(`${cookie}=`));
   return values.length === 1 ? values[0].slice(cookie.length + 1) : '';
@@ -13,7 +13,7 @@ function equal(a: string, b: string) {
   const x = Buffer.from(a), y = Buffer.from(b);
   return x.length === y.length && timingSafeEqual(x, y);
 }
-export function createAccountsRouter({ store, origin, enabled, mode, proxyAddress }: AccountsOptions) {
+export function createAccountsRouter({ store, origin, enabled, mode, proxyAddress, temporaryPasswordResetSecret }: AccountsOptions) {
   const router = express.Router();
   const classrooms = enabled && store ? new ClassroomStore(store) : undefined;
   const dashboards = enabled && store ? new DashboardStore(store) : undefined;
@@ -53,6 +53,17 @@ export function createAccountsRouter({ store, origin, enabled, mode, proxyAddres
     if (!equal(req.get('x-csrf-token') || '', csrfFor(value))) throw new AccountError('csrf_rejected', 403);
     return value;
   }
+  const resetSecret = isStrongResetSecret(temporaryPasswordResetSecret) ? temporaryPasswordResetSecret : undefined;
+  if (resetSecret) router.post('/accounts/temporary-password-reset', express.json({ limit: '8kb', strict: true }), run(async (req, res) => {
+    const clientAddress = req.ip || req.socket.remoteAddress || 'unknown';
+    const body = req.body;
+    if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).length !== 1 ||
+        typeof body.password !== 'string' || body.password.length < 12 || body.password.length > 128) {
+      throw new AccountError('reset_rejected');
+    }
+    await store!.resetFixedSchoolAdminPassword(req.get('x-noon-password-reset') || '', resetSecret, body.password, clientAddress);
+    res.status(200).json({ ok: true });
+  }));
   function throttle(req: Request) {
     const now = Date.now(), key = production ? req.ip || 'unknown' : req.socket.remoteAddress || 'local';
     const entry = attempts.get(key);
