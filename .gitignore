@@ -1,0 +1,11 @@
+node_modules
+build/
+dist/
+coverage/
+.DS_Store
+*.log
+.env*
+!.env.example
+
+# Generated from the installed, version-matched PDF.js package
+public/pdfjs/
