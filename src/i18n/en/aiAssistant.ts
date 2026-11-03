@@ -1,0 +1,50 @@
+import { AiAssistantTranslations } from '../types';
+
+export const aiAssistant: AiAssistantTranslations = {
+  panelTitle: 'Noon Tools',
+  geminiBadge: 'Unavailable',
+  localMockBadge: 'Unavailable',
+  geminiPoweredBadge: 'Not available',
+  selectionTypePrefix: 'Selection Type:',
+  loadingTitle: 'This tool is currently unavailable.',
+  loadingSub: 'You can continue reading the book stored on this device.',
+  errorTitle: 'Assistant Notice',
+  retryBtn: 'Retry',
+  closeBtn: 'Close',
+  disclaimer: 'Explanations and generated responses are not available.',
+  explain: 'Explain (unavailable)',
+  simplify: 'Simplify (unavailable)',
+  stepByStep: 'Step by Step (unavailable)',
+  hint: 'Hint (unavailable)',
+  quiz: 'Quiz (unavailable)',
+  analyzeProblem: 'Problem analysis (unavailable)',
+  explainFigure: 'Figure explanation (unavailable)',
+  readAloud: 'Listen',
+  toolsList: {
+    simplify: 'Simplify (unavailable)',
+    simplifyDesc: 'Currently unavailable',
+    stepByStep: 'Step by Step (unavailable)',
+    stepByStepDesc: 'Currently unavailable',
+    hint: 'Hint (unavailable)',
+    hintDesc: 'Currently unavailable',
+    quiz: 'Quiz (unavailable)',
+    quizDesc: 'Quizzes are currently unavailable',
+    readAloud: 'Listen',
+    readAloudDesc: 'Audio narration is currently unavailable',
+    analyzeProblem: 'Problem analysis (unavailable)',
+    analyzeProblemDesc: 'Currently unavailable',
+    explainFigure: 'Figure explanation (unavailable)',
+    explainFigureDesc: 'Currently unavailable',
+  },
+  quizFeedback: {
+    checkAnswer: 'Check Answer',
+    correct: 'Correct answer! Well done 🎉',
+    incorrect: 'Incorrect, check the explanation below:',
+  },
+  audioPlayer: {
+    playing: 'Audio narration is currently unavailable.',
+    paused: 'Audio narration is currently unavailable.',
+  },
+};
+
+export default aiAssistant;
