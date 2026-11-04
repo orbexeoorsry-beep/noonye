@@ -26,6 +26,7 @@ export async function fetchAuthenticatedUserId(
   if (!payload || typeof payload !== 'object') {
     throw new Error('The server returned an invalid session identity.');
   }
+  if ((payload as { publicTrial?: unknown }).publicTrial === true) return null;
   const user = (payload as { user?: unknown }).user;
   if (!user || typeof user !== 'object') {
     throw new Error('The server returned an invalid session identity.');

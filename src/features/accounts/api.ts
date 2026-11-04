@@ -1,5 +1,6 @@
 export type Role = 'school_admin' | 'teacher' | 'student';
-export type Me = { user: { id: string; username: string; displayName: string }; school: { id: string; name: string; slug?: string }; role: Role; csrfToken: string };
+export type Me = { user: { id: string; username: string; displayName: string }; school: { id: string; name: string; slug?: string }; role: Role; csrfToken: string; publicTrial?: boolean };
+export type PublicTrialAccount = { id: string; username: string; displayName: string; role: Role; school: { id: string; name: string; slug: string } };
 import { broadcastSchoolSessionChange } from './sessionSignals';
 
 export const request = async (url: string, init: RequestInit = {}) => {

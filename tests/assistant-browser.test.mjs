@@ -20,12 +20,16 @@ try {
     const page = await context.newPage();
     const assistantRequests = [];
     const dataRequests = [];
+    const sessionRequests = [];
     const sockets = [];
     let fixtureLoaded = false;
     await page.addInitScript(language => localStorage.setItem('noon_language', language), lang);
     await page.route('**/*', async route => {
       const url = new URL(route.request().url());
       if (url.origin !== origin) { await route.abort('blockedbyclient'); return; }
+      if (url.pathname === '/api/accounts/me') {
+        await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ user: { id: '11111111-1111-4111-8111-111111111111' } }) }); return;
+      }
       if (url.pathname === '/src/mock-data/books.ts') {
         fixtureLoaded = true;
         await route.fulfill({ contentType: 'application/javascript', body: `export const INITIAL_ADMIN_BOOKS=${JSON.stringify([fixture])}; export const INITIAL_BOOKS=INITIAL_ADMIN_BOOKS;` }); return;
@@ -37,7 +41,10 @@ try {
     });
     page.on('request', r => {
       if (r.url().includes('/api/assistant')) assistantRequests.push(r.url());
-      if (['fetch', 'xhr', 'eventsource', 'ping'].includes(r.resourceType())) dataRequests.push(r.url());
+      if (['fetch', 'xhr', 'eventsource', 'ping'].includes(r.resourceType())) {
+        if (new URL(r.url()).pathname === '/api/accounts/me') sessionRequests.push(r.url());
+        else dataRequests.push(r.url());
+      }
     });
     page.on('websocket', socket => sockets.push(socket.url()));
     await page.goto(origin);
@@ -222,7 +229,8 @@ try {
       assert.match(text, /Experimental demo|Experimental review|عرض تجريبي|عرض مراجعة تجريبي/);
     }
     assert.equal(assistantRequests.length, 0);
-    assert.deepEqual(dataRequests, [], `${lang} no fetch/XHR/eventsource/beacon requests, including component imports`);
+    assert.ok(sessionRequests.length > 0 && sessionRequests.every(url => new URL(url).pathname === '/api/accounts/me'), `${lang} only the local synthetic identity gate may issue a session fetch`);
+    assert.deepEqual(dataRequests, [], `${lang} no assistant/content fetch/XHR/eventsource/beacon requests`);
     // Vite's injected development client still attempts its local HMR socket
     // with hmr:false. Account for it explicitly, never as assistant traffic.
     // Component-level WebSocket attempts remain intercepted and counted above.

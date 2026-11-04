@@ -26,6 +26,14 @@ async function startServer() {
   configureAccountsProxy(app, 'proxyAddress' in accounts ? accounts.proxyAddress : undefined);
   if (accounts.enabled) process.umask(0o077);
   const accountStore = accounts.enabled ? new AccountStore(accounts.database!, applicationRoot) : undefined;
+  const productionAccounts = 'mode' in accounts && accounts.mode === 'proxy-production';
+  // Owner-authorized temporary Noon production trial; set NOON_PUBLIC_TRIAL=0 to close it.
+  const publicTrialProductionOrigin = 'https://noon.roubex.com';
+  const publicTrialAccess = accounts.enabled && (
+    productionAccounts
+      ? accounts.origin === publicTrialProductionOrigin && process.env.NOON_PUBLIC_TRIAL !== '0'
+      : process.env.NOON_PUBLIC_TRIAL === '1'
+  );
   const trustedViteFiles: string[] = [];
   if (process.env.NODE_ENV !== 'production') {
     const packageRoot = path.dirname(realpathSync(createRequire(import.meta.url).resolve('vite/package.json')));
@@ -40,7 +48,7 @@ async function startServer() {
     }
     next();
   });
-  app.use('/api', createAccountsRouter({ ...accounts, store: accountStore, temporaryPasswordResetSecret: process.env.NOON_TEMP_PASSWORD_RESET_SECRET }));
+  app.use('/api', createAccountsRouter({ ...accounts, store: accountStore, publicAccess: publicTrialAccess, temporaryPasswordResetSecret: process.env.NOON_TEMP_PASSWORD_RESET_SECRET }));
   app.use(express.json({ limit: '5mb' }));
   app.get('/api/health', (_req: Request, res: Response) => {
     res.json({ status: 'ok', assistantAvailable: false });

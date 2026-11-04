@@ -23,7 +23,7 @@ const oldConnect=net.connect; net.connect=function(...args){ counts.outbound.pus
 process.on('exit',persist);
 `);
 writeFileSync(countsFile, JSON.stringify({ parser: 0, outbound: [] }));
-const child = spawn('node', ['--import', instrumentation, 'server.js'], { cwd: process.cwd(), env: { ...process.env, PORT: String(port), NODE_ENV: 'production' }, stdio: ['ignore','pipe','pipe'] });
+const child = spawn('node', ['--import', instrumentation, 'dist/server.js'], { cwd: process.cwd(), env: { ...process.env, PORT: String(port), NODE_ENV: 'production' }, stdio: ['ignore','pipe','pipe'] });
 let logs=''; child.stdout.on('data',x=>logs+=x); child.stderr.on('data',x=>logs+=x);
 function req(body?:string, headers:Record<string,string>={}) { return new Promise<{status:number,text:string}>((resolve,reject)=>{const r=http.request({hostname:'127.0.0.1',port,path:'/api/assistant/explain',method:'POST',headers:{...headers,...(body===undefined?{}:{'content-type':'application/json','content-length':String(Buffer.byteLength(body))})}},res=>{let text='';res.setEncoding('utf8');res.on('data',c=>text+=c);res.on('end',()=>resolve({status:res.statusCode||0,text}));});r.on('error',reject);if(body!==undefined)r.end(body);else r.end();});}
 try {

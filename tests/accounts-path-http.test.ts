@@ -13,10 +13,12 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import * as net from 'node:net';
 import { tmpdir } from 'node:os';
+import { build } from 'esbuild';
 import { AccountStore } from '../server/features/accounts/store';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const serverBundle = path.join(repo, 'server.js');
+const serverBundle = path.join(repo, 'dist', 'server.js');
+const developmentServerBundle = path.join(repo, 'dist', 'server-development.js');
 const node = process.execPath;
 const shellMarker = 'PHYSICAL_FIXTURE_SHELL_20261022';
 const decoyMarker = 'FOREIGN_CWD_DECOY_20261022';
@@ -26,7 +28,10 @@ const TEST_TMP = tmpdir();
 interface Fixture {
   base: string; app: string; cwd: string; db: string; port: number;
 }
-async function fixture(): Promise<Fixture> {
+async function buildDevelopmentBundle() {
+  await build({ entryPoints: [path.join(repo, 'server.ts')], bundle: true, platform: 'node', format: 'esm', packages: 'external', outfile: developmentServerBundle });
+}
+async function fixture(mode: 'development' | 'production' = 'production'): Promise<Fixture> {
   mkdirSync(TEST_TMP, { recursive: true });
   const base = mkdtempSync(path.join(TEST_TMP, 'http-'));
   const app = path.join(base, 'physical-app');
@@ -34,7 +39,7 @@ async function fixture(): Promise<Fixture> {
   mkdirSync(path.join(app, 'dist'), { recursive: true });
   mkdirSync(path.join(app, 'public'), { recursive: true });
   mkdirSync(path.join(cwd, 'dist'), { recursive: true });
-  copyFileSync(serverBundle, path.join(app, 'server.js'));
+  copyFileSync(mode === 'development' ? developmentServerBundle : serverBundle, path.join(app, 'server.js'));
   symlinkSync(path.join(repo, 'node_modules'), path.join(app, 'node_modules'), 'dir');
   writeFileSync(path.join(app, 'dist', 'index.html'), `<!doctype html><title>${shellMarker}</title>`);
   writeFileSync(path.join(cwd, 'dist', 'index.html'), `<!doctype html><title>${decoyMarker}</title>`);
@@ -233,7 +238,8 @@ test('symlinked production entry resolves security root to physical bundle, not 
 
 for (const mode of ['development', 'production'] as const) {
   test(`${mode} actual bundle denies SQLite aliases in public namespaces and Vite paths`, async () => {
-    const f = await fixture();
+    if (mode === 'development') await buildDevelopmentBundle();
+    const f = await fixture(mode);
     createMarkedDatabase(f.db);
     let walHandle: DatabaseSync | undefined;
     if (mode === 'development') {

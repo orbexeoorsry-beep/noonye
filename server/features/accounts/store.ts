@@ -12,6 +12,7 @@ const RESET_IP_LIMIT = 10;
 const RESET_GLOBAL_LIMIT = 120;
 const RESET_TARGET_SCHOOL = 'al-horua';
 const RESET_TARGET_USERNAME = 'walud';
+const UUID_V4_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 export type Role = 'school_admin' | 'teacher' | 'student';
 export interface Member { id: string; username: string; displayName: string; role: Role }
 interface UserRow extends Member { school_id: string; password_hash: string }
@@ -227,6 +228,30 @@ export class AccountStore {
     return { user: { id: row.id, username: row.username, displayName: row.displayName }, school: { id: row.school_id, slug: row.schoolSlug, name: row.schoolName }, role: row.role, csrfToken: csrfFor(token) };
   }
   logout(token: string) { this.db.prepare('DELETE FROM sessions WHERE token_hash=?').run(hashToken(token)); }
+  listPublicTrialAccounts() {
+    const rows = this.db.prepare(`SELECT u.id,u.username,u.display_name AS displayName,u.role,
+      s.id AS schoolId,s.slug AS schoolSlug,s.name AS schoolName
+      FROM users u JOIN schools s ON s.id=u.school_id
+      ORDER BY s.name,s.slug,CASE u.role WHEN 'school_admin' THEN 0 WHEN 'teacher' THEN 1 ELSE 2 END,u.display_name,u.username,u.id`).all() as Array<{
+        id: string; username: string; displayName: string; role: Role;
+        schoolId: string; schoolSlug: string; schoolName: string;
+      }>;
+    return rows.map(row => ({
+      id: row.id, username: row.username, displayName: row.displayName, role: row.role,
+      school: { id: row.schoolId, slug: row.schoolSlug, name: row.schoolName },
+    }));
+  }
+  issuePublicTrialSession(userId: string, now = Date.now()) {
+    if (!UUID_V4_RE.test(userId)) throw new AccountError('invalid_input');
+    const user = this.db.prepare('SELECT id FROM users WHERE id=?').get(userId) as { id: string } | undefined;
+    if (!user) throw new AccountError('public_account_unavailable', 404);
+    const token = randomBytes(32).toString('base64url');
+    this.immediate(() => {
+      this.db.prepare('DELETE FROM sessions WHERE expires_at<=?').run(now);
+      this.db.prepare('INSERT INTO sessions (token_hash,user_id,expires_at) VALUES (?,?,?)').run(hashToken(token), userId, now + 8 * 60 * 60 * 1000);
+    });
+    return token;
+  }
   private authorize(token: string, schoolId: string) {
     const identity = this.identity(token);
     if (identity.school.id !== schoolId || identity.role !== 'school_admin') throw new AccountError('forbidden', 403);

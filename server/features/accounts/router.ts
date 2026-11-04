@@ -4,7 +4,7 @@ import { AccountError, AccountStore, csrfFor, isStrongResetSecret, validateCrede
 import { ClassroomStore } from '../classrooms/store';
 import { DashboardStore } from '../dashboards/store';
 
-export interface AccountsOptions { store?: AccountStore; origin: string; enabled: boolean; mode?: 'proxy-production'; proxyAddress?: string; temporaryPasswordResetSecret?: string }
+export interface AccountsOptions { store?: AccountStore; origin: string; enabled: boolean; mode?: 'proxy-production'; proxyAddress?: string; temporaryPasswordResetSecret?: string; publicAccess?: boolean }
 function sessionToken(req: Request, cookie: string) {
   const values = (req.headers.cookie || '').split(';').map(v => v.trim()).filter(v => v.startsWith(`${cookie}=`));
   return values.length === 1 ? values[0].slice(cookie.length + 1) : '';
@@ -13,7 +13,7 @@ function equal(a: string, b: string) {
   const x = Buffer.from(a), y = Buffer.from(b);
   return x.length === y.length && timingSafeEqual(x, y);
 }
-export function createAccountsRouter({ store, origin, enabled, mode, proxyAddress, temporaryPasswordResetSecret }: AccountsOptions) {
+export function createAccountsRouter({ store, origin, enabled, mode, proxyAddress, temporaryPasswordResetSecret, publicAccess }: AccountsOptions) {
   const router = express.Router();
   const classrooms = enabled && store ? new ClassroomStore(store) : undefined;
   const dashboards = enabled && store ? new DashboardStore(store) : undefined;
@@ -21,8 +21,13 @@ export function createAccountsRouter({ store, origin, enabled, mode, proxyAddres
   const production = mode === 'proxy-production';
   if (production && (new URL(origin).protocol !== 'https:' || proxyAddress !== '127.0.0.1')) throw new Error('Verified HTTPS loopback proxy required');
   const cookie = production ? '__Host-noon_session' : 'noon_local_session';
+  const trialCookie = production ? '__Host-noon_trial_session' : 'noon_local_trial_session';
+  const publicTrialEnabled = publicAccess === true && enabled && !!store;
   const cookieOptions = { httpOnly: true, sameSite: 'strict' as const, path: production ? '/' : '/api', secure: production };
-  const session = (req: Request) => sessionToken(req, cookie);
+  const normalSession = (req: Request) => sessionToken(req, cookie);
+  const trialSession = (req: Request) => sessionToken(req, trialCookie);
+  const session = (req: Request) => normalSession(req) || (publicTrialEnabled ? trialSession(req) : '');
+  const isPublicTrial = (req: Request) => publicTrialEnabled && !normalSession(req) && !!trialSession(req);
   const attempts = new Map<string, { count: number; until: number }>();
   router.use((req, res, next) => {
     if (!/^\/(accounts|schools|classes|readings)(\/|$)/.test(req.path)) { next('router'); return; }
@@ -37,7 +42,7 @@ export function createAccountsRouter({ store, origin, enabled, mode, proxyAddres
     }
     if (req.get('sec-fetch-site') === 'cross-site') { res.status(403).json({ error: 'origin_rejected' }); return; }
     if (req.method === 'GET' && req.path === '/accounts/status') {
-      res.json({ enabled, mode: enabled ? (production ? 'proxy-production' : 'local-only') : 'disabled' }); return;
+      res.json({ enabled, mode: enabled ? (production ? 'proxy-production' : 'local-only') : 'disabled', ...(publicTrialEnabled ? { publicAccess: true } : {}) }); return;
     }
     if (!enabled || !store || !classrooms) { res.status(503).json({ error: 'accounts_disabled' }); return; }
     // Raw Host is checked, never req.hostname (which may use X-Forwarded-Host).
@@ -74,12 +79,27 @@ export function createAccountsRouter({ store, origin, enabled, mode, proxyAddres
     if (!entry || entry.until <= now) { attempts.set(key, { count: 1, until: now + 15 * 60 * 1000 }); return; }
     if (++entry.count > 30) throw new AccountError('try_later', 429);
   }
+  if (publicTrialEnabled) {
+    router.get('/accounts/public-users', run((_req, res) => res.json({ accounts: store!.listPublicTrialAccounts() })));
+    router.post('/accounts/public-session', run((req, res) => {
+      throttle(req);
+      const body = req.body;
+      if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).length !== 1 || typeof body.userId !== 'string') throw new AccountError('invalid_input');
+      const oldNormal = normalSession(req), oldTrial = trialSession(req);
+      if (oldNormal) store!.logout(oldNormal);
+      if (oldTrial && oldTrial !== oldNormal) store!.logout(oldTrial);
+      const fresh = store!.issuePublicTrialSession(body.userId);
+      res.clearCookie(cookie, cookieOptions).cookie(trialCookie, fresh, { ...cookieOptions, maxAge: 8 * 60 * 60 * 1000 });
+      res.json({ ...store!.identity(fresh), publicTrial: true });
+    }));
+  }
   router.post('/accounts/login', run(async (req, res) => {
     throttle(req);
     const value = validateCredentials(req.body);
     const fresh = await store!.login(value.schoolSlug as string, value.username as string, value.password as string);
-    const old = session(req);
-    if (old) store!.logout(old);
+    const oldNormal = normalSession(req), oldTrial = trialSession(req);
+    if (oldNormal) store!.logout(oldNormal);
+    if (oldTrial && oldTrial !== oldNormal) { store!.logout(oldTrial); res.clearCookie(trialCookie, cookieOptions); }
     res.cookie(cookie, fresh, { ...cookieOptions, maxAge: 8 * 60 * 60 * 1000 });
     res.json(store!.identity(fresh));
   }));
@@ -87,11 +107,14 @@ export function createAccountsRouter({ store, origin, enabled, mode, proxyAddres
     throttle(req);
     res.status(201).json({ member: await classrooms!.acceptInvitation(req.body) });
   }));
-  router.get('/accounts/me', run((req, res) => res.json(store!.identity(token(req)))));
+  router.get('/accounts/me', run((req, res) => res.json({ ...store!.identity(token(req)), ...(isPublicTrial(req) ? { publicTrial: true } : {}) })));
   router.get('/accounts/dashboard', run((req, res) => res.json(dashboards!.get(token(req)))));
   router.post('/accounts/logout', run((req, res) => {
-    store!.logout(mutation(req));
-    res.clearCookie(cookie, cookieOptions);
+    const current = mutation(req), oldNormal = normalSession(req), oldTrial = trialSession(req);
+    store!.logout(current);
+    if (oldNormal && oldNormal !== current) store!.logout(oldNormal);
+    if (oldTrial && oldTrial !== current && oldTrial !== oldNormal) store!.logout(oldTrial);
+    res.clearCookie(cookie, cookieOptions).clearCookie(trialCookie, cookieOptions);
     res.status(204).end();
   }));
   router.get('/schools/:schoolId/members', run((req, res) => res.json({ members: store!.listMembers(token(req), req.params.schoolId) })));

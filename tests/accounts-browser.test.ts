@@ -31,7 +31,7 @@ test('real browser: persisted classroom completion, lost response retry, indepen
   const reading = rooms.createReading(teacher, classroom.id, { title: 'قراءة اختبار مصطنعة', pagesFrom: 2, pagesTo: 4 });
   seed.close();
   async function start() {
-    child = spawn(process.execPath, ['server.js'], { cwd: process.cwd(), env: { ...process.env, NODE_ENV: 'production', PORT: String(port), NOON_ACCOUNTS_LOCAL: '1', NOON_LOCAL_ACCOUNTS_DB: database, NOON_LOCAL_ACCOUNTS_ORIGIN: origin }, stdio: ['ignore', 'pipe', 'pipe'] });
+    child = spawn(process.execPath, ['dist/server.js'], { cwd: process.cwd(), env: { ...process.env, NODE_ENV: 'production', PORT: String(port), NOON_ACCOUNTS_LOCAL: '1', NOON_LOCAL_ACCOUNTS_DB: database, NOON_LOCAL_ACCOUNTS_ORIGIN: origin }, stdio: ['ignore', 'pipe', 'pipe'] });
     child.stdout!.on('data', data => logs += data); child.stderr!.on('data', data => logs += data);
     for (let n = 0; n < 100; n++) {
       try { if ((await fetch(`${origin}/api/health`)).ok) return; } catch { /* startup */ }
